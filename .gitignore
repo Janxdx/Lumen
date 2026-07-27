@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.DS_Store
+*.local
+*.log
+
+# vite writes these next to the config while resolving it
+vite.config.ts.timestamp-*.mjs
