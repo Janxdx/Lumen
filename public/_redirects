@@ -1,3 +1,0 @@
-# Single-page app: every route serves the shell. Real files (assets, sw.js,
-# the manifest, icons) are matched before this rule, so they are unaffected.
-/*  /index.html  200

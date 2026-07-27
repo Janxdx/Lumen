@@ -1,0 +1,11 @@
+{
+  // Static-assets-only Worker: there is no server-side code, Cloudflare just
+  // serves the built files. `npx wrangler deploy` reads this.
+  "name": "lumen",
+  "compatibility_date": "2026-07-27",
+  "assets": {
+    "directory": "./dist",
+    // every unmatched route serves the shell — the reader is a single page
+    "not_found_handling": "single-page-application"
+  }
+}

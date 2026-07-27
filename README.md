@@ -29,18 +29,22 @@ Offline needs a service worker, and a service worker needs a secure context:
 neither, so nothing is ever cached and the app dies with the dev server. The
 fix is a static host — the build is just files.
 
-**Cloudflare Pages, connected to this repo:**
+**Cloudflare Workers, connected to this repo:**
 
 | Setting | Value |
 | --- | --- |
-| Framework preset | None |
 | Build command | `npm run build` |
-| Build output directory | `dist` |
+| Deploy command | `npx wrangler deploy` |
 | Node version | 20 or newer (`NODE_VERSION` env var) |
 
-Every push to `main` builds and publishes. `public/_headers` keeps `index.html`
-and `sw.js` uncacheable so a new deploy is actually picked up, and pins the
-hashed assets forever. `public/_redirects` serves the shell for every route.
+`wrangler.jsonc` is what makes that deploy command work: it declares an
+assets-only Worker — no server code — pointing at `dist`, with
+`not_found_handling: single-page-application` so every route serves the shell.
+Locally the same thing runs as `npm run deploy`.
+
+`public/_headers` keeps `index.html` and `sw.js` uncacheable so a new deploy is
+actually picked up on a device that already has the app installed, and pins the
+hashed assets for a year.
 
 Then, once, on the iPad: open the `*.pages.dev` URL in Safari → Share → **Add to
 Home Screen**, and launch it from that icon. Books stay on the device — the host
