@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host",
     "typecheck": "tsc --noEmit",
-    "deploy": "npm run build && npx wrangler deploy"
+    "deploy": "npm run build && npx wrangler deploy",
+    "test": "tsx tests/device-math.test.mts && tsx tests/device-store.test.mts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.9",
@@ -22,6 +23,8 @@
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^6.0.4",
+    "fake-indexeddb": "^6.0.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.5.4",
     "vite": "^8.1.5"
   }

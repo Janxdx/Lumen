@@ -19,23 +19,32 @@ import {
   newUid,
   type BookRecord,
   type BookmarkRecord,
+  type DeviceBookRecord,
+  type DeviceSessionRecord,
   type ProgressRecord,
 } from '../db';
 import type { Session } from '../engine/stats';
 import { useLibrary } from '../store/library';
+import { useDevice } from '../store/device';
 import { useSettings } from '../store/settings';
 import { BUCKET, humanError, supabase, syncEnabled } from './client';
 import {
   bookToRow,
   bookmarkToRow,
+  deviceBookToRow,
+  deviceSessionToRow,
   progressToRow,
   rowToBook,
   rowToBookmark,
+  rowToDeviceBook,
+  rowToDeviceSession,
   rowToProgress,
   rowToSession,
   sessionToRow,
   type BookRow,
   type BookmarkRow,
+  type DeviceBookRow,
+  type DeviceSessionRow,
   type ProgressRow,
   type SessionRow,
   type SettingsRow,
@@ -168,6 +177,10 @@ export const useSync = create<SyncState>((set, get) => ({
         await syncFiles(user.id);
 
         await useLibrary.getState().load();
+        await useDevice.getState().load();
+        /* a reader book that arrived from another device may match a book
+           this one has imported since — link it before it is ever shown */
+        await useDevice.getState().autoLink();
         const done = Date.now();
         await writeMeta({ lastSyncedAt: done });
         set({ status: 'idle', step: null, lastSyncedAt: done });
@@ -321,6 +334,46 @@ async function pull(cursor: string): Promise<string> {
     }
   }
 
+  /* device books — last write wins, same as the library */
+  const dBooks = await sb.from('device_books').select('*').gt('synced_at', cursor);
+  if (dBooks.error) throw dBooks.error;
+  const dBookRows = (dBooks.data ?? []) as DeviceBookRow[];
+  next = maxStamp(next, dBookRows);
+  for (const row of dBookRows) {
+    if (pending.has(`device_books:${row.id}`)) continue;
+    const local = await db.deviceBooks.get(row.id);
+    if (row.deleted) {
+      if (local) {
+        await db.deviceBooks.delete(row.id);
+        await db.deviceSessions.where('deviceBookId').equals(row.id).delete();
+      }
+      continue;
+    }
+    if (!local || local.updatedAt <= row.updated_at) {
+      await db.deviceBooks.put(rowToDeviceBook(row) as DeviceBookRecord);
+    }
+  }
+
+  /* device sessions — editable, unlike library sessions, so they merge on
+     `updated_at` rather than being treated as append-only */
+  const dSess = await sb.from('device_sessions').select('*').gt('synced_at', cursor);
+  if (dSess.error) throw dSess.error;
+  const dSessRows = (dSess.data ?? []) as DeviceSessionRow[];
+  next = maxStamp(next, dSessRows);
+  for (const row of dSessRows) {
+    if (pending.has(`device_sessions:${row.uid}`)) continue;
+    const local = await db.deviceSessions.where('uid').equals(row.uid).first();
+    if (row.deleted) {
+      if (local?.id != null) await db.deviceSessions.delete(local.id);
+      continue;
+    }
+    if (!local) {
+      await db.deviceSessions.add(rowToDeviceSession(row) as DeviceSessionRecord);
+    } else if (local.updatedAt <= row.updated_at && local.id != null) {
+      await db.deviceSessions.update(local.id, rowToDeviceSession(row));
+    }
+  }
+
   /* settings — one blob, newest wins */
   const settings = await sb.from('settings').select('*').gt('synced_at', cursor).limit(1);
   if (settings.error) throw settings.error;
@@ -356,9 +409,21 @@ async function push(userId: string, since: number): Promise<void> {
     if (error) throw error;
   }
 
-  /* sessions are immutable; `end` doubles as their creation stamp. Any that
-     predate the uid column get one now so they can be pushed at all. */
-  const sessions = (await db.sessions.toArray()).filter((s) => s.end > since);
+  /* Sessions recorded in the app are immutable, so `end` doubles as their
+     creation stamp. Sessions mirrored from the e-reader are not: they are
+     dated when the reading happened, which may be days before you typed it
+     in, and they change when a page count is corrected. So those are picked
+     up by their device session's `updatedAt` instead — going by `end` alone
+     would silently never push a backfilled session at all. */
+  const touchedDeviceSessions = (await db.deviceSessions.toArray()).filter(
+    (s) => s.updatedAt > since
+  );
+  const mirrorUids = new Set(
+    touchedDeviceSessions.map((s) => s.mirrorUid).filter(Boolean) as string[]
+  );
+  const sessions = (await db.sessions.toArray()).filter(
+    (s) => s.end > since || (s.uid && mirrorUids.has(s.uid))
+  );
   const needUid = sessions.filter((s) => !s.uid);
   for (const s of needUid) {
     const uid = newUid();
@@ -389,6 +454,31 @@ async function push(userId: string, since: number): Promise<void> {
     if (error) throw error;
   }
 
+  const deviceBooks = (await db.deviceBooks.toArray()).filter((b) => b.updatedAt > since);
+  if (deviceBooks.length) {
+    const { error } = await sb
+      .from('device_books')
+      .upsert(deviceBooks.map((b) => deviceBookToRow(b, userId)));
+    if (error) throw error;
+  }
+
+  const deviceSessions = touchedDeviceSessions;
+  for (const s of deviceSessions) {
+    if (!s.uid) {
+      const uid = newUid();
+      s.uid = uid;
+      if (s.id != null) await db.deviceSessions.update(s.id, { uid });
+    }
+  }
+  if (deviceSessions.length) {
+    const { error } = await sb
+      .from('device_sessions')
+      .upsert(deviceSessions.map((s) => deviceSessionToRow(s, userId)), {
+        onConflict: 'user_id,uid',
+      });
+    if (error) throw error;
+  }
+
   const settingsAt = Number(localStorage.getItem(SETTINGS_AT) ?? 0);
   if (settingsAt > since) {
     const { error } = await sb.from('settings').upsert({
@@ -403,8 +493,11 @@ async function push(userId: string, since: number): Promise<void> {
   const stones = await db.tombstones.toArray();
   for (const stone of stones) {
     const table = stone.table;
+    // books are keyed by a client-generated `id`, the append-only tables by `uid`
     const match =
-      table === 'books' ? { id: stone.uid } : { uid: stone.uid };
+      table === 'books' || table === 'device_books'
+        ? { id: stone.uid }
+        : { uid: stone.uid };
     const { error } = await sb
       .from(table)
       .update({ deleted: true, updated_at: stone.at })

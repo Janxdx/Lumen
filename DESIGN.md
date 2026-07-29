@@ -40,9 +40,10 @@ src/
     paginate.ts    CSS multi-column pagination + page-of-word lookup
     pacer.ts       rAF scheduler: WPM + punctuation/length dwell modelling
     stats.ts       session aggregation, streaks, heatmap, WPM trend
+    device.ts      page ⇄ percent ⇄ word position, pace projection, matching
   db/              Dexie (IndexedDB): books, files, progress, sessions, settings
   store/           app state (zustand)
-  ui/              Library · Reader · Pacer · Stats · Settings
+  ui/              Library · Reader · Pacer · Device · Stats · Settings
 ```
 
 `engine/` never imports React. In a native shell the reading surface is a `WKWebView` running the same engine — which is what Apple Books and Kindle do, since EPUB *is* HTML and CSS.
@@ -63,6 +64,15 @@ punctuationFactor , ; : → 1.5    . ! ? → 2.2    ¶ end → 2.6
 ```
 
 Pages auto-turn when the highlight crosses the page boundary. Play/pause, ±10 WPM, and a "ramp" mode that eases from a comfortable speed to the target over the first minute.
+
+**Device shelf** — a second library for books read on an e-ink reader. You give
+a book its page count, time a session, and enter the page you stopped on; the
+page count is the scale that converts that into the percentage the rest of the
+app speaks in, and from there into a spine index and word offset. Each logged
+session is mirrored into the ordinary session history, so reading done away
+from the app counts towards every statistic. Books link to their library
+counterpart by exact title and author, and progress only ever moves forward —
+a reader entry behind the app is recorded but does not rewind your place.
 
 **Statistics** — tracked per session and rolled up:
 

@@ -150,3 +150,35 @@ export const IconExit = ({ size = 20, className }: P) => (
     <path d="M20 12h-9" />
   </svg>
 );
+
+/* an e-ink reader: a slab with a page of text and a page-turn bar */
+export const IconDevice = ({ size = 20, className }: P) => (
+  <svg {...base(size)} className={className}>
+    <rect x="5" y="3" width="14" height="18" rx="2.2" />
+    <path d="M8.5 7.5h7" />
+    <path d="M8.5 10.5h7" />
+    <path d="M8.5 13.5h4.5" />
+    <path d="M10 17.6h4" />
+  </svg>
+);
+
+export const IconTimer = ({ size = 20, className }: P) => (
+  <svg {...base(size)} className={className}>
+    <circle cx="12" cy="13.5" r="7.5" />
+    <path d="M12 9.5v4l2.6 1.8" />
+    <path d="M9.5 2.5h5" />
+  </svg>
+);
+
+export const IconLink = ({ size = 20, className }: P) => (
+  <svg {...base(size)} className={className}>
+    <path d="M10.5 13.5a3.6 3.6 0 0 0 5.2.3l2.6-2.6a3.7 3.7 0 0 0-5.2-5.2l-1.4 1.4" />
+    <path d="M13.5 10.5a3.6 3.6 0 0 0-5.2-.3l-2.6 2.6a3.7 3.7 0 0 0 5.2 5.2l1.4-1.4" />
+  </svg>
+);
+
+export const IconStop = ({ size = 20, className }: P) => (
+  <svg {...base(size)} className={className} fill="currentColor" stroke="none">
+    <rect x="6" y="6" width="12" height="12" rx="2.4" />
+  </svg>
+);

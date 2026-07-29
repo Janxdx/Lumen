@@ -58,11 +58,62 @@ export interface SettingsRecord {
   value: unknown;
 }
 
+/* ── the device shelf ──────────────────────────────────────────────
+   Books read on a physical e-ink reader. They have no EPUB here and no
+   word positions of their own — only a page count, which is the single
+   number that lets a session logged on the reader be translated into the
+   percentage this app speaks in. */
+
+export interface DeviceBookRecord {
+  id: string;
+  title: string;
+  author: string;
+  /** number of the last page of the book as the reader counts them */
+  pages: number;
+  /** first page of the body text — front matter would otherwise skew every % */
+  startPage: number;
+  /** page the reader is on now (last page read) */
+  currentPage: number;
+  /** linked book in the library, when one matches */
+  bookId?: string;
+  /** true once a link has been confirmed or deliberately broken by hand,
+      so auto-matching never overrules a decision you already made */
+  linkPinned?: boolean;
+  /** e.g. "Kobo Libra", shown on the card */
+  device?: string;
+  addedAt: number;
+  updatedAt: number;
+  finishedAt?: number;
+  /** stable gradient seed, same idea as BookRecord.hue */
+  hue: number;
+}
+
+export interface DeviceSessionRecord {
+  id?: number;
+  /** stable across devices */
+  uid?: string;
+  deviceBookId: string;
+  start: number;
+  end: number;
+  /** active time, pauses excluded */
+  ms: number;
+  fromPage: number;
+  toPage: number;
+  /** toPage − fromPage, stored so an edited page count can't rewrite history */
+  pages: number;
+  /** words this is worth, from the linked book's density (0 when unknown) */
+  words: number;
+  /** uid of the mirrored library session, so an edit updates rather than duplicates */
+  mirrorUid?: string;
+  note?: string;
+  updatedAt: number;
+}
+
 /** A record deleted locally, kept until the deletion has reached the server. */
 export interface TombstoneRecord {
   /** `${table}:${uid}` */
   key: string;
-  table: 'books' | 'bookmarks';
+  table: 'books' | 'bookmarks' | 'device_books' | 'device_sessions';
   uid: string;
   at: number;
 }
@@ -79,6 +130,8 @@ class LumenDB extends Dexie {
   bookmarks!: Table<BookmarkRecord, number>;
   settings!: Table<SettingsRecord, string>;
   tombstones!: Table<TombstoneRecord, string>;
+  deviceBooks!: Table<DeviceBookRecord, string>;
+  deviceSessions!: Table<DeviceSessionRecord, number>;
 
   constructor() {
     super('lumen');
@@ -128,6 +181,21 @@ class LumenDB extends Dexie {
             m.updatedAt ??= m.createdAt;
           });
       });
+
+    /* v3 adds the device shelf. No existing table changes shape, so there is
+       no upgrade body — Dexie creates the two new stores and leaves the rest. */
+    this.version(3).stores({
+      books: 'id, addedAt, finishedAt, updatedAt',
+      files: 'bookId',
+      covers: 'bookId',
+      progress: 'bookId, updatedAt',
+      sessions: '++id, bookId, start, &uid',
+      bookmarks: '++id, bookId, createdAt, &uid, updatedAt',
+      settings: 'key',
+      tombstones: 'key, at',
+      deviceBooks: 'id, addedAt, updatedAt, bookId',
+      deviceSessions: '++id, deviceBookId, start, &uid, updatedAt',
+    });
   }
 }
 
@@ -179,6 +247,43 @@ export async function deleteBook(bookId: string): Promise<void> {
     }
   );
   // sessions are deliberately kept: deleting a book shouldn't rewrite history
+}
+
+/** Remove a tracked reader book and every session logged against it.
+    Unlike the library, history goes with it: these sessions exist only as
+    something you typed in, so keeping orphans would be keeping guesses. */
+export async function deleteDeviceBook(id: string): Promise<void> {
+  await db.transaction(
+    'rw',
+    [db.deviceBooks, db.deviceSessions, db.sessions, db.tombstones],
+    async () => {
+      const logged = await db.deviceSessions.where('deviceBookId').equals(id).toArray();
+      const now = Date.now();
+
+      // the mirrored library sessions go too, or the stats would double-count
+      // reading that no longer has a book behind it
+      const mirrors = logged.map((s) => s.mirrorUid).filter(Boolean) as string[];
+      for (const uid of mirrors) {
+        const mirror = await db.sessions.where('uid').equals(uid).first();
+        if (mirror?.id != null) await db.sessions.delete(mirror.id);
+      }
+
+      await db.deviceBooks.delete(id);
+      await db.deviceSessions.where('deviceBookId').equals(id).delete();
+
+      await db.tombstones.bulkPut([
+        { key: `device_books:${id}`, table: 'device_books', uid: id, at: now },
+        ...logged
+          .filter((s) => s.uid)
+          .map((s) => ({
+            key: `device_sessions:${s.uid}`,
+            table: 'device_sessions' as const,
+            uid: s.uid as string,
+            at: now,
+          })),
+      ]);
+    }
+  );
 }
 
 /** Free the local EPUB but keep the book in the library (it lives in the cloud). */
