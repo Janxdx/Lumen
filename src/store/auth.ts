@@ -64,6 +64,10 @@ export const useAuth = create<AuthState>((set, get) => ({
     const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
+      // point the confirmation link at wherever this page actually runs,
+      // rather than trusting the project's default Site URL (Supabase seeds
+      // that with localhost:3000, which is never right for a deployed app)
+      options: { emailRedirectTo: location.origin },
     });
     if (error) {
       set({ busy: false, error: humanError(error) });
