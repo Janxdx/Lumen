@@ -106,3 +106,47 @@ export const IconMinus = ({ size = 20, className }: P) => (
     <path d="M5 12h14" />
   </svg>
 );
+
+export const IconAccount = ({ size = 20, className }: P) => (
+  <svg {...base(size)} className={className}>
+    <circle cx="12" cy="8.4" r="3.6" />
+    <path d="M4.8 20a7.2 7.2 0 0 1 14.4 0" />
+  </svg>
+);
+
+export const IconCloud = ({ size = 20, className }: P) => (
+  <svg {...base(size)} className={className}>
+    <path d="M7 18.5a4 4 0 0 1-.4-8A5.2 5.2 0 0 1 16.6 9 3.8 3.8 0 0 1 17 18.5z" />
+  </svg>
+);
+
+export const IconSync = ({ size = 20, className }: P) => (
+  <svg {...base(size)} className={className}>
+    <path d="M20 11.5A8 8 0 0 0 6.3 6.3L4 8.5" />
+    <path d="M4 4.5v4h4" />
+    <path d="M4 12.5a8 8 0 0 0 13.7 5.2L20 15.5" />
+    <path d="M20 19.5v-4h-4" />
+  </svg>
+);
+
+export const IconCheck = ({ size = 20, className }: P) => (
+  <svg {...base(size)} className={className}>
+    <path d="m5 12.5 4.5 4.5L19 7.5" />
+  </svg>
+);
+
+export const IconDownload = ({ size = 20, className }: P) => (
+  <svg {...base(size)} className={className}>
+    <path d="M12 4v11" />
+    <path d="m7.5 10.5 4.5 4.5 4.5-4.5" />
+    <path d="M5 20h14" />
+  </svg>
+);
+
+export const IconExit = ({ size = 20, className }: P) => (
+  <svg {...base(size)} className={className}>
+    <path d="M14 5H6.5A1.5 1.5 0 0 0 5 6.5v11A1.5 1.5 0 0 0 6.5 19H14" />
+    <path d="M17 8.5 20.5 12 17 15.5" />
+    <path d="M20 12h-9" />
+  </svg>
+);

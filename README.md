@@ -50,6 +50,54 @@ Then, once, on the iPad: open the `*.pages.dev` URL in Safari → Share → **Ad
 Home Screen**, and launch it from that icon. Books stay on the device — the host
 only ever serves the app itself.
 
+## Accounts and sync
+
+Optional, and off until you configure it. With no credentials set there is no
+network traffic at all and the Account tab says so; the reader is unchanged.
+
+**Set it up once:**
+
+1. Create a project at [supabase.com](https://supabase.com) (free tier is plenty).
+2. SQL Editor → paste [`supabase/schema.sql`](./supabase/schema.sql) → Run. That
+   creates the tables, the row-level-security policies, and the private `books`
+   storage bucket.
+3. Authentication → Providers → Email: on. Turn *Confirm email* off while
+   testing, on before anyone else uses it.
+4. `cp .env.example .env.local` and fill in the project URL and the **anon** key
+   (Project Settings → API). Never the `service_role` key — it bypasses RLS.
+5. In Cloudflare, add the same two variables under Settings → Variables, then
+   redeploy. Vite inlines them at build time, so a redeploy is required.
+
+**What syncs:** the book list, the EPUB files themselves, reading position,
+every session behind the statistics, bookmarks, and your reader settings.
+Signing in on a device that already has books uploads them to the account.
+
+**How conflicts resolve:** last write wins, per record. The cursor is the
+server's clock (`synced_at`), never the device's, so two iPads with clocks a
+minute apart can't take turns overwriting each other. Deletions leave a
+tombstone locally so a deleted book doesn't reappear on the next pull.
+
+**Files:** EPUBs go to `books/<user id>/<book id>.epub` in Supabase Storage,
+private, readable only by that user. A book pulled from another device arrives
+as metadata first and downloads its file the moment you open it — a fresh iPad
+is usable in seconds rather than after the whole library transfers. *Account →
+Download all* fetches everything up front for a flight.
+
+### Moving to your own server
+
+The Supabase pieces are deliberately shallow, so this stays a small job:
+
+- `supabase/schema.sql` is plain PostgreSQL apart from `auth.uid()`. Point it at
+  your own Postgres and swap that call for `current_setting('app.user_id')::uuid`,
+  set per connection from your own JWT. Table shapes don't change.
+- `src/sync/client.ts` is the only file that constructs a Supabase client.
+  Self-hosting Supabase means changing the URL in `.env` and nothing else.
+- `src/sync/sync.ts` and `src/sync/mapping.ts` are the only files that name
+  tables or storage paths. Replacing the backend entirely means rewriting those
+  three files; nothing in `ui/`, `store/` or `engine/` knows a server exists.
+- Object storage is S3-compatible either way, so `books/<user>/<book>.epub`
+  carries over to MinIO or R2 unchanged.
+
 ## Using it
 
 - **Import** — drag an `.epub` onto the library, or *Add EPUB* to pick from Files.
@@ -70,8 +118,13 @@ src/engine/     portable core — no React, no app state
   pacer.ts      dwell modelling and the rAF scheduler
   stats.ts      session aggregation — pure functions over recorded sessions
 src/db/         IndexedDB (Dexie): books, files, covers, progress, sessions
-src/store/      settings and library state
-src/ui/         Library, Reader, Pacer controls, Statistics, Charts
+src/store/      settings, library and account state
+src/sync/       the only code that knows a backend exists
+  client.ts     Supabase client + config; absent config disables sync
+  mapping.ts    local record ⇄ wire row
+  sync.ts       pull → merge → push, plus file upload/download
+src/ui/         Library, Reader, Pacer controls, Statistics, Charts, Account
+supabase/       schema.sql — tables, RLS policies, storage bucket
 ```
 
 `engine/` is deliberately free of React so it can move into a native shell

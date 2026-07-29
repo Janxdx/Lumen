@@ -6,6 +6,8 @@
 
 export interface Session {
   id?: number;
+  /** stable identity across devices; the numeric `id` is local storage detail */
+  uid?: string;
   bookId: string;
   /** epoch ms */
   start: number;

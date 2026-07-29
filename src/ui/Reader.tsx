@@ -15,6 +15,7 @@ import { gutterFor, measure, pageOf, scrollToPage, type Geometry } from '../engi
 import { Pacer } from '../engine/pacer';
 import { useSettings } from '../store/settings';
 import { useLibrary } from '../store/library';
+import { useSync } from '../sync/sync';
 import { Sheet } from './Sheet';
 import { ReaderSettings } from './ReaderSettings';
 import {
@@ -46,6 +47,7 @@ export function Reader({ bookId, onClose }: { bookId: string; onClose: () => voi
   const [toc, setToc] = useState(false);
   const [prefs, setPrefs] = useState(false);
   const [ready, setReady] = useState(false);
+  const [unavailable, setUnavailable] = useState(false);
   const [wordIndex, setWordIndex] = useState(0);
 
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -89,12 +91,27 @@ export function Reader({ bookId, onClose }: { bookId: string; onClose: () => voi
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const [record, file, progress] = await Promise.all([
+      const [record, progress] = await Promise.all([
         db.books.get(bookId),
-        db.files.get(bookId),
         db.progress.get(bookId),
       ]);
-      if (!record || !file || !alive) return;
+      if (!record || !alive) return;
+
+      /* The book may have arrived from another device as metadata only.
+         Fetch the EPUB now — this is the moment the reader actually needs
+         the bytes, and it keeps a fresh iPad from downloading a whole
+         library before you can open anything. */
+      let file = await db.files.get(bookId);
+      if (!file) {
+        setBook(record); // title in the bar while the download runs
+        if (!(await useSync.getState().ensureFile(bookId))) {
+          if (alive) setUnavailable(true);
+          return;
+        }
+        file = await db.files.get(bookId);
+      }
+      if (!file || !alive) return;
+
       zipRef.current = await EpubZip.open(file.data);
       if (!alive) return;
       startWordRef.current = progress?.wordIndex ?? 0;
@@ -554,6 +571,21 @@ export function Reader({ bookId, onClose }: { bookId: string; onClose: () => voi
         >
           <div className={columnClass} ref={columnsRef} />
         </div>
+
+        {/* the book exists in the library but its file is neither on this
+            device nor reachable right now — say so instead of a blank page */}
+        {unavailable && (
+          <div className="reader-empty">
+            <p className="display">Not downloaded</p>
+            <p className="muted">
+              This book lives in your account. Reconnect and open it again to
+              download it.
+            </p>
+            <button className="btn" onClick={onClose}>
+              Back to library
+            </button>
+          </div>
+        )}
 
         {/* affordance only — the turn itself is resolved in onPointerUp */}
         <div className="tapzone l" />

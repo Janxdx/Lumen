@@ -4,5 +4,10 @@ dist/
 *.local
 *.log
 
+# credentials — .env.example is the one that belongs in git
+.env
+.env.*
+!.env.example
+
 # vite writes these next to the config while resolving it
 vite.config.ts.timestamp-*.mjs

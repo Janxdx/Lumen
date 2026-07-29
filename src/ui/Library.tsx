@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { useLibrary } from '../store/library';
 import { BookCover } from './BookCover';
-import { IconPlus, IconTrash } from './Icons';
+import { IconCloud, IconPlus, IconTrash } from './Icons';
 import { formatDuration, relativeDate } from '../engine/stats';
 import { Sheet } from './Sheet';
 import type { BookRecord } from '../db';
@@ -140,6 +140,12 @@ export function Library({ onOpen }: { onOpen: (id: string) => void }) {
                   >
                     <div className="cover">
                       <BookCover book={b} url={covers[b.id]} />
+                      {/* synced from another device, file not fetched yet */}
+                      {b.fileMissing && (
+                        <span className="cloud-badge" title="Downloads when opened">
+                          <IconCloud size={14} />
+                        </span>
+                      )}
                     </div>
                     <div className="meta">
                       <div className="t">{b.meta.title}</div>

@@ -1074,6 +1074,242 @@ input[type='range']::-moz-range-thumb {
   animation: sheetup 300ms var(--ease-spring);
 }
 
+/* a book that is in the account but not on this device */
+.cloud-badge {
+  position: absolute;
+  top: var(--s2);
+  right: var(--s2);
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  color: var(--ink-2);
+  background: var(--glass);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-1);
+}
+
+.reader-empty {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s4);
+  text-align: center;
+  padding: var(--s6);
+  background: var(--bg);
+}
+.reader-empty .muted {
+  max-width: 30ch;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+/* ─── account ───────────────────────────────────────────────────── */
+
+/* the signed-out screen is deliberately narrow and centred — it is the only
+   place in the app that asks something of you, so it gets its own calm */
+.auth {
+  max-width: 400px;
+  padding-top: clamp(var(--s5), 7vh, var(--s8));
+}
+.auth-mark {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-md);
+  margin-bottom: var(--s5);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.auth-lede {
+  margin-top: var(--s3);
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+.auth-lede code {
+  font-size: 12.5px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+
+.auth-form {
+  margin-top: var(--s6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+.field > span {
+  font-size: 11px;
+  font-weight: 640;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.field input {
+  height: 48px;
+  padding: 0 var(--s4);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 16px; /* anything smaller makes iOS zoom the page on focus */
+  font-family: var(--font-ui);
+  transition: border-color 180ms, box-shadow 180ms;
+}
+.field input::placeholder {
+  color: var(--ink-3);
+}
+.field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.auth-submit {
+  height: 48px;
+  justify-content: center;
+  font-size: 15px;
+  margin-top: var(--s2);
+}
+.auth-submit:disabled {
+  opacity: 0.45;
+}
+
+.auth-msg {
+  font-size: 13.5px;
+  line-height: 1.45;
+  padding: var(--s3) var(--s4);
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  animation: fadein 240ms var(--ease-out);
+}
+.auth-msg.bad {
+  color: #b0402f;
+  border-color: rgba(176, 64, 47, 0.28);
+  background: rgba(176, 64, 47, 0.08);
+}
+[data-theme='ink'] .auth-msg.bad {
+  color: #e8907c;
+}
+.auth-msg.good {
+  color: var(--ink-2);
+  border-color: var(--accent-soft);
+  background: var(--accent-soft);
+}
+@keyframes fadein {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+
+.auth-alt {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s4);
+  margin-top: var(--s5);
+}
+.linky {
+  font-size: 13.5px;
+  font-weight: 560;
+  color: var(--accent);
+}
+.linky.muted {
+  color: var(--ink-3);
+  font-weight: 500;
+}
+.auth-foot {
+  margin-top: var(--s5);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+
+.acct-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  margin: 10px 0 var(--s6);
+}
+.avatar {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-family: var(--font-num);
+  font-size: 23px;
+  font-weight: 600;
+  color: var(--accent-ink);
+  background: var(--accent);
+  box-shadow: var(--shadow-1);
+}
+.acct-id {
+  min-width: 0;
+}
+.acct-email {
+  font-family: var(--font-read);
+  font-size: clamp(20px, 3vw, 26px);
+  letter-spacing: -0.015em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.acct-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.acct-status.idle {
+  color: var(--ink-3);
+}
+.acct-status.error {
+  color: #b0402f;
+}
+[data-theme='ink'] .acct-status.error {
+  color: #e8907c;
+}
+
+.spin {
+  animation: spin 1.1s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* unobtrusive nudge on the Account tab while signed out */
+.tabbar button .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-left: -2px;
+  align-self: flex-start;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 1ms !important;

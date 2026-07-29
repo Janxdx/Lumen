@@ -1,21 +1,41 @@
 import { useEffect, useState } from 'react';
 import { useLibrary } from './store/library';
+import { useAuth } from './store/auth';
 import { resolveTheme, useSettings } from './store/settings';
+import { initSync, useSync } from './sync/sync';
+import { syncEnabled } from './sync/client';
 import { Library } from './ui/Library';
 import { Stats } from './ui/Stats';
+import { Account } from './ui/Account';
 import { Reader } from './ui/Reader';
-import { IconLibrary, IconStats } from './ui/Icons';
+import { IconAccount, IconLibrary, IconStats } from './ui/Icons';
+
+type Tab = 'library' | 'stats' | 'account';
 
 export default function App() {
-  const [tab, setTab] = useState<'library' | 'stats'>('library');
+  const [tab, setTab] = useState<Tab>('library');
   const [reading, setReading] = useState<string | null>(null);
   const load = useLibrary((s) => s.load);
   const loading = useLibrary((s) => s.loading);
   const mode = useSettings((s) => s.mode);
+  const signedIn = useAuth((s) => Boolean(s.user));
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  /* Account and sync boot. Neither blocks the library from rendering: the
+     session is restored in the background and a sync is kicked off once an
+     account is known, so a cold start on the sofa still opens instantly. */
+  useEffect(() => {
+    if (!syncEnabled) return;
+    useAuth.getState().init();
+    initSync();
+    void useSync.getState().init();
+    return useAuth.subscribe((s, prev) => {
+      if (s.user && s.user.id !== prev.user?.id) void useSync.getState().syncNow();
+    });
+  }, []);
 
   /* theme follows the setting, and tracks the system when set to auto */
   useEffect(() => {
@@ -39,8 +59,10 @@ export default function App() {
         <div style={{ flex: 1 }} />
       ) : tab === 'library' ? (
         <Library onOpen={setReading} />
-      ) : (
+      ) : tab === 'stats' ? (
         <Stats />
+      ) : (
+        <Account />
       )}
 
       {!reading && (
@@ -53,6 +75,13 @@ export default function App() {
           </button>
           <button className={tab === 'stats' ? 'on' : ''} onClick={() => setTab('stats')}>
             <IconStats size={18} /> Statistics
+          </button>
+          <button
+            className={tab === 'account' ? 'on' : ''}
+            onClick={() => setTab('account')}
+          >
+            <IconAccount size={18} /> Account
+            {syncEnabled && !signedIn && <i className="dot" aria-hidden />}
           </button>
         </nav>
       )}
