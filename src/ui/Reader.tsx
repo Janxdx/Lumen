@@ -195,10 +195,16 @@ export function Reader({ bookId, onClose }: { bookId: string; onClose: () => voi
       geoRef.current = geo;
       setPages(geo.pages);
 
-      const span = spansRef.current[targetWord];
+      /* A word index can come from outside this render — a device sync
+         computes one proportionally from a page number — so it may sit past
+         the spans actually laid out. Clamp rather than fall back to page 0,
+         which would silently throw away a restored position. */
+      const spans = spansRef.current;
+      const wanted = spans.length ? Math.min(targetWord, spans.length - 1) : targetWord;
+      const span = spans[wanted];
       const target = toEnd ? geo.pages - 1 : span ? pageOf(span, el, geo) : 0;
       goto(target);
-      const landed = toEnd ? firstWordOnPage(target) : targetWord;
+      const landed = toEnd ? firstWordOnPage(target) : wanted;
       wordRef.current = landed;
       setWordIndex(landed);
       highlight(landed);

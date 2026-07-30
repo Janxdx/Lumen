@@ -18,6 +18,9 @@ export interface Session {
   pages: number;
   /** portion of `ms` spent with the pacer running */
   pacedMs: number;
+  /** where the reading happened. Absent means in this app, which is what
+      every session recorded before the device shelf existed was. */
+  source?: 'app' | 'device';
 }
 
 export interface DayBucket {

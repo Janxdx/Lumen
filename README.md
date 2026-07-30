@@ -107,6 +107,34 @@ The Supabase pieces are deliberately shallow, so this stays a small job:
 
 Keyboard: `←`/`→` turn pages, `space` toggles the pacer, `esc` closes.
 
+## Reading on an e-reader
+
+The **Reader** tab is a second shelf for books you read on an e-ink device,
+where the app can only know what you tell it.
+
+- **Track a book** with its page count. That count is the whole mechanism: it
+  is the scale that turns "I stopped on page 148" into a percentage.
+- **Time a session**, then enter the page you stopped on. The timer lives in
+  the database, so closing the app mid-session doesn't lose it, and it prefills
+  the end page from your recent pace. Sessions you forgot to time can be
+  entered by hand with a date and a duration.
+- **It lands in your statistics.** Every logged session is mirrored into the
+  same history the reader writes, so time, words, pace and streaks count
+  reading done away from the app.
+- **And in the book, if you have it.** A tracked book links to a library book
+  with the same title and author automatically; you can also link or unlink by
+  hand, which pins the choice. Progress only ever moves forward — a page count
+  behind where the app already is still counts as reading, but won't rewind
+  your place.
+
+If you get the page count wrong, fix it: every past session and the reading
+position are recomputed from the corrected number.
+
+Two caveats worth knowing. Front matter occupies pages on the reader but no
+words here, so set *body starts on page* if the book has a lot of it. And
+within a chapter the position is proportional — pages can locate you to within
+a chapter exactly, and to a few paragraphs inside it.
+
 ## Layout
 
 ```
@@ -117,13 +145,20 @@ src/engine/     portable core — no React, no app state
   paginate.ts   column geometry, page lookup, scroll tween
   pacer.ts      dwell modelling and the rAF scheduler
   stats.ts      session aggregation — pure functions over recorded sessions
-src/db/         IndexedDB (Dexie): books, files, covers, progress, sessions
+  device.ts     page ⇄ percent ⇄ word position, pace projection, book matching
+src/db/         IndexedDB (Dexie): books, files, covers, progress, sessions,
+                device books and their logged sessions
 src/store/      settings, library and account state
 src/sync/       the only code that knows a backend exists
   client.ts     Supabase client + config; absent config disables sync
   mapping.ts    local record ⇄ wire row
   sync.ts       pull → merge → push, plus file upload/download
-src/ui/         Library, Reader, Pacer controls, Statistics, Charts, Account
+src/ui/         Library, Reader, Pacer controls, Device shelf, Statistics,
+                Charts, Account
+tests/          run with `npm test` — the page↔word maths and the store's
+                sync rules. Plain Node, no build step and no test framework:
+                Node strips the types itself and `register.mjs` teaches it
+                the extensionless imports a bundler would resolve
 supabase/       schema.sql — tables, RLS policies, storage bucket
 ```
 

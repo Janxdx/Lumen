@@ -4,13 +4,15 @@ import { useAuth } from './store/auth';
 import { resolveTheme, useSettings } from './store/settings';
 import { initSync, useSync } from './sync/sync';
 import { syncEnabled } from './sync/client';
+import { useDevice } from './store/device';
 import { Library } from './ui/Library';
 import { Stats } from './ui/Stats';
 import { Account } from './ui/Account';
+import { Device } from './ui/Device';
 import { Reader } from './ui/Reader';
-import { IconAccount, IconLibrary, IconStats } from './ui/Icons';
+import { IconAccount, IconDevice, IconLibrary, IconStats } from './ui/Icons';
 
-type Tab = 'library' | 'stats' | 'account';
+type Tab = 'library' | 'device' | 'stats' | 'account';
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('library');
@@ -19,10 +21,27 @@ export default function App() {
   const loading = useLibrary((s) => s.loading);
   const mode = useSettings((s) => s.mode);
   const signedIn = useAuth((s) => Boolean(s.user));
+  const timerRunning = useDevice((s) => Boolean(s.timer?.runningSince));
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  /* The device shelf loads alongside the library, and every time the library
+     changes size the matcher runs: importing an EPUB you have been reading
+     on the e-reader should link the two without you asking. */
+  useEffect(() => {
+    void (async () => {
+      await useDevice.getState().load();
+      await useDevice.getState().autoLink();
+    })();
+    let count = useLibrary.getState().books.length;
+    return useLibrary.subscribe((s) => {
+      if (s.books.length === count) return;
+      count = s.books.length;
+      void useDevice.getState().autoLink();
+    });
+  }, []);
 
   /* Account and sync boot. Neither blocks the library from rendering: the
      session is restored in the background and a sync is kicked off once an
@@ -59,6 +78,8 @@ export default function App() {
         <div style={{ flex: 1 }} />
       ) : tab === 'library' ? (
         <Library onOpen={setReading} />
+      ) : tab === 'device' ? (
+        <Device />
       ) : tab === 'stats' ? (
         <Stats />
       ) : (
@@ -72,6 +93,10 @@ export default function App() {
             onClick={() => setTab('library')}
           >
             <IconLibrary size={18} /> Library
+          </button>
+          <button className={tab === 'device' ? 'on' : ''} onClick={() => setTab('device')}>
+            <IconDevice size={18} /> Reader
+            {timerRunning && <i className="dot live" aria-hidden />}
           </button>
           <button className={tab === 'stats' ? 'on' : ''} onClick={() => setTab('stats')}>
             <IconStats size={18} /> Statistics

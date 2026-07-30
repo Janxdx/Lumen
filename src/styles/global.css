@@ -193,6 +193,17 @@ body::after {
   background: var(--surface);
   box-shadow: var(--shadow-1);
 }
+/* four tabs don't fit a phone at full width, so away from the iPad only the
+   selected one keeps its label — the icons carry the rest */
+@media (max-width: 560px) {
+  .tabbar button {
+    padding: 0 var(--s4);
+  }
+  .tabbar button:not(.on) {
+    font-size: 0;
+    gap: 0;
+  }
+}
 
 /* ─── library ───────────────────────────────────────────────────── */
 .lib-head {
@@ -1308,6 +1319,114 @@ input[type='range']::-moz-range-thumb {
   background: var(--accent);
   margin-left: -2px;
   align-self: flex-start;
+}
+/* the same dot, breathing, while a reader session is running */
+.tabbar button .dot.live {
+  animation: pulse 2.4s var(--ease-out) infinite;
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.72);
+  }
+}
+
+/* ── device shelf ─────────────────────────────────────────────────
+   The running session is the one piece of this app that is live, so it
+   gets the only surface that announces itself: a warm gradient panel and
+   a large number you can read across a room. */
+
+.timer-card {
+  display: flex;
+  align-items: center;
+  gap: var(--s6);
+  flex-wrap: wrap;
+  padding: var(--s5) var(--s6);
+  margin-bottom: var(--s7);
+  border-radius: var(--r-xl);
+  background: linear-gradient(150deg, var(--surface), var(--surface-2));
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-1);
+  animation: rise 520ms var(--ease-out) both;
+}
+.timer-meta {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.timer-clock {
+  font-family: var(--font-num);
+  font-size: clamp(38px, 7vw, 62px);
+  font-weight: 300;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  line-height: 1;
+  opacity: 0.55;
+  transition: opacity 400ms var(--ease-out);
+}
+.timer-clock.live {
+  opacity: 1;
+}
+.timer-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  flex-wrap: wrap;
+}
+
+/* the link between a tracked book and its counterpart in the library */
+.link-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  margin-top: var(--s5);
+  padding: var(--s3) var(--s4);
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+.link-strip.on {
+  border-color: var(--accent-soft);
+  background: var(--accent-soft);
+  color: var(--ink-2);
+}
+.link-strip b {
+  font-weight: 600;
+  color: var(--ink);
+}
+.link-strip svg {
+  flex: none;
+}
+
+/* selects match the text fields rather than the platform's own chrome */
+.field select {
+  height: 48px;
+  padding: 0 var(--s4);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 16px;
+  font-family: var(--font-ui);
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--ink-3) 50%),
+    linear-gradient(135deg, var(--ink-3) 50%, transparent 50%);
+  background-position: calc(100% - 20px) 21px, calc(100% - 14px) 21px;
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+}
+.field select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 @media (prefers-reduced-motion: reduce) {
