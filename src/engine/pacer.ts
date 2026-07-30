@@ -87,10 +87,17 @@ export class Pacer {
   /** ms actually spent pacing — feeds the statistics */
   pacedMs = 0;
 
-  constructor(
-    private onWord: Listener,
-    private onFinish: () => void
-  ) {}
+  /* Written out rather than as constructor parameter properties: that is the
+     one piece of TypeScript that isn't just erasable type annotation, and
+     avoiding it lets the engine run under Node's own type stripping — which
+     is what the test suite does, with no build step. */
+  private onWord: Listener;
+  private onFinish: () => void;
+
+  constructor(onWord: Listener, onFinish: () => void) {
+    this.onWord = onWord;
+    this.onFinish = onFinish;
+  }
 
   load(words: string[], startAt = 0): void {
     this.stop();

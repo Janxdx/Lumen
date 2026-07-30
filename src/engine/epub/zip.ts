@@ -2,7 +2,11 @@ import { unzip, type Unzipped } from 'fflate';
 
 /** An opened EPUB container: a flat map of zip path → bytes. */
 export class EpubZip {
-  private constructor(readonly files: Unzipped) {}
+  readonly files: Unzipped;
+
+  private constructor(files: Unzipped) {
+    this.files = files;
+  }
 
   static async open(data: ArrayBuffer): Promise<EpubZip> {
     const bytes = new Uint8Array(data);

@@ -156,7 +156,9 @@ src/sync/       the only code that knows a backend exists
 src/ui/         Library, Reader, Pacer controls, Device shelf, Statistics,
                 Charts, Account
 tests/          run with `npm test` — the page↔word maths and the store's
-                sync rules, both runnable without a browser
+                sync rules. Plain Node, no build step and no test framework:
+                Node strips the types itself and `register.mjs` teaches it
+                the extensionless imports a bundler would resolve
 supabase/       schema.sql — tables, RLS policies, storage bucket
 ```
 
