@@ -1,11 +1,58 @@
 {
-  // Static-assets-only Worker: there is no server-side code, Cloudflare just
-  // serves the built files. `npx wrangler deploy` reads this.
-  "name": "lumen",
-  "compatibility_date": "2026-07-27",
-  "assets": {
-    "directory": "./dist",
-    // every unmatched route serves the shell — the reader is a single page
-    "not_found_handling": "single-page-application"
-  }
+	// The Worker is now both the API and the file server: requests under
+	// /api and /auth are handled in worker/index.ts, everything else falls
+	// through to the built front-end in ./dist.
+	//
+	// Same origin for both is deliberate — it is what lets the session live
+	// in an HttpOnly cookie instead of a token in JavaScript.
+	"name": "lumen",
+	"main": "worker/index.ts",
+	"compatibility_date": "2026-07-27",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"assets": {
+		"directory": "./dist",
+		"binding": "ASSETS",
+		// every unmatched route serves the shell — the reader is a single page
+		"not_found_handling": "single-page-application",
+		// …except these, which must reach the Worker first.
+		//
+		// The asset router runs ahead of the Worker, and with
+		// single-page-application handling it answers *any* navigation to an
+		// unknown path with index.html and a 200. /auth/callback is a
+		// navigation — a magic link opened in a browser — so without this it
+		// is swallowed by the shell: the token is never spent, no session
+		// cookie is set, and the app simply loads signed out with nothing
+		// anywhere to say why. curl hides the problem, because the behaviour
+		// keys off Sec-Fetch-Mode: navigate, which only a browser sends.
+		"run_worker_first": [
+			"/api/*",
+			"/auth/*"
+		]
+	},
+	"vars": {
+		// The canonical origin. Passkeys are bound to this hostname, so it has
+		// to be the address people actually use — change it when you attach a
+		// custom domain, or every assertion will be refused by the browser.
+		"APP_ORIGIN": "http://localhost:8787",
+		"MAIL_FROM": "Lumen <lumen@example.com>"
+	},
+	"d1_databases": [
+		{
+			// `binding` is the name the code uses: env.DB in worker/data.ts.
+			// It is not the database's name and does not have to match it.
+			"binding": "DB",
+			"database_name": "lumen",
+			"database_id": "a255e5ef-3836-4c3f-aa97-dd0bb06f6929"
+		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "BOOKS",
+			"bucket_name": "lumen-books"
+		}
+	]
+	// Secrets are not listed here — they are set once, and never committed:
+	//   npx wrangler secret put RESEND_API_KEY
 }

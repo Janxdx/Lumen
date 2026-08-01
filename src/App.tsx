@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLibrary } from './store/library';
 import { useAuth } from './store/auth';
 import { resolveTheme, useSettings } from './store/settings';
@@ -14,8 +14,22 @@ import { IconAccount, IconDevice, IconLibrary, IconStats } from './ui/Icons';
 
 type Tab = 'library' | 'device' | 'stats' | 'account';
 
+const TABS: Tab[] = ['library', 'device', 'stats', 'account'];
+
+/* Which tab the address bar is asking for.
+
+   There is no router here and there does not need to be one — the tabs are
+   state, not pages. But the magic-link callback has to land somewhere, and
+   the Worker sends it to `#/account`, so the hash is read once at boot and
+   kept in step afterwards. Anything unrecognised means the library, which
+   is also what an empty hash means. */
+function tabFromHash(): Tab {
+  const name = location.hash.replace(/^#\/?/, '').split('?')[0] as Tab;
+  return TABS.includes(name) ? name : 'library';
+}
+
 export default function App() {
-  const [tab, setTab] = useState<Tab>('library');
+  const [tab, setTab] = useState<Tab>(tabFromHash);
   const [reading, setReading] = useState<string | null>(null);
   const load = useLibrary((s) => s.load);
   const loading = useLibrary((s) => s.loading);
@@ -54,6 +68,30 @@ export default function App() {
     return useAuth.subscribe((s, prev) => {
       if (s.user && s.user.id !== prev.user?.id) void useSync.getState().syncNow();
     });
+  }, []);
+
+  /* Keep the hash pointing at the tab you are on, so a reload puts you back
+     where you were rather than in the library.
+
+     Deliberately skipped on the first render. The hash arriving from the
+     callback carries `?welcome=1`, and the account store reads that in an
+     effect of its own to show "Signed in." — writing over it here would
+     make whether the message appears depend on which effect happened to run
+     first. */
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    history.replaceState(null, '', `${location.pathname}#/${tab}`);
+  }, [tab]);
+
+  /* Back and forward should move between tabs, not out of the app. */
+  useEffect(() => {
+    const onPop = () => setTab(tabFromHash());
+    window.addEventListener('hashchange', onPop);
+    return () => window.removeEventListener('hashchange', onPop);
   }, []);
 
   /* theme follows the setting, and tracks the system when set to auto */

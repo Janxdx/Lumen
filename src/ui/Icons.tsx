@@ -182,3 +182,12 @@ export const IconStop = ({ size = 20, className }: P) => (
     <rect x="6" y="6" width="12" height="12" rx="2.4" />
   </svg>
 );
+
+export const IconKey = ({ size = 20, className }: P) => (
+  <svg {...base(size)} className={className}>
+    <circle cx="8.2" cy="8.2" r="3.7" />
+    <path d="m10.9 10.9 7.6 7.6" />
+    <path d="m16.2 16.2 1.8-1.8" />
+    <path d="m18.5 18.5 1.8-1.8" />
+  </svg>
+);

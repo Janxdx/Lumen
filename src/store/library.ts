@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import {
+  coverToBlob,
   db,
   deleteBook,
   newUid,
@@ -57,7 +58,7 @@ export const useLibrary = create<LibraryState>((set, get) => ({
 
     const covers: Record<string, string> = { ...get().covers };
     for (const c of coverRows) {
-      if (!covers[c.bookId]) covers[c.bookId] = URL.createObjectURL(c.blob);
+      if (!covers[c.bookId]) covers[c.bookId] = URL.createObjectURL(coverToBlob(c));
     }
 
     set({ books, progress, covers, sessions, loading: false });
@@ -87,10 +88,17 @@ export const useLibrary = create<LibraryState>((set, get) => ({
         updatedAt: Date.now(),
       };
 
+      /* Read the cover out to bytes *before* the transaction opens: awaiting a
+         non-Dexie promise inside one drops us out of its scope, and a Blob is
+         not safe to hand to IndexedDB in the first place (see CoverRecord). */
+      const cover = book.coverBlob
+        ? { data: await book.coverBlob.arrayBuffer(), type: book.coverBlob.type }
+        : null;
+
       await db.transaction('rw', [db.books, db.files, db.covers], async () => {
         await db.books.put(record);
         await db.files.put({ bookId: id, data, size: file.size });
-        if (book.coverBlob) await db.covers.put({ bookId: id, blob: book.coverBlob });
+        if (cover) await db.covers.put({ bookId: id, ...cover });
       });
 
       void requestPersistence();

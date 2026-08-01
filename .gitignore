@@ -11,3 +11,6 @@ dist/
 
 # vite writes these next to the config while resolving it
 vite.config.ts.timestamp-*.mjs
+
+# wrangler local state (D1 and R2 live here during `wrangler dev`)
+.wrangler/

@@ -1301,6 +1301,87 @@ input[type='range']::-moz-range-thumb {
 [data-theme='ink'] .acct-status.error {
   color: #e8907c;
 }
+/* Unverified is a waiting state, not a failure — amber, not red, so it reads
+   as "one thing left to do" rather than "something broke". */
+.acct-status.unverified {
+  color: #9a6b1e;
+}
+[data-theme='ink'] .acct-status.unverified {
+  color: #d9a94e;
+}
+
+.panel.warn {
+  border-color: rgba(154, 107, 30, 0.34);
+  background: linear-gradient(
+    to bottom,
+    rgba(154, 107, 30, 0.07),
+    var(--surface) 60%
+  );
+}
+[data-theme='ink'] .panel.warn {
+  border-color: rgba(217, 169, 78, 0.3);
+  background: linear-gradient(
+    to bottom,
+    rgba(217, 169, 78, 0.09),
+    var(--surface) 60%
+  );
+}
+.panel.warn .row {
+  border: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.acct-msg {
+  margin-bottom: var(--s5);
+}
+
+/* A rule with the word set into it, rather than above or beside it — the
+   two sign-in routes are alternatives, and the divider should say so
+   without taking a whole line of its own. */
+.auth-or {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  margin: var(--s5) 0;
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+.auth-or::before,
+.auth-or::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+.key-list {
+  list-style: none;
+  margin: 0 0 var(--s5);
+  padding: 0;
+}
+.key-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s4);
+  padding: var(--s4) 0;
+  border-bottom: 1px solid var(--line);
+}
+.key-list li:last-child {
+  border-bottom: 0;
+}
+
+.hint.good {
+  color: var(--accent);
+  margin-top: var(--s2);
+}
+.hint.bad {
+  color: #b0402f;
+  margin-top: var(--s2);
+}
+[data-theme='ink'] .hint.bad {
+  color: #e8907c;
+}
 
 .spin {
   animation: spin 1.1s linear infinite;

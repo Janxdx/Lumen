@@ -27,10 +27,30 @@ export interface FileRecord {
   size: number;
 }
 
+/* Covers are held as raw bytes, never as a Blob.
+
+   Storing a Blob in IndexedDB is legal on paper and unreliable in practice:
+   the browser has to hand the blob's backing file to the object store, and
+   when that backing is still owned by something else — a fetch response that
+   hasn't fully settled, or a view into a buffer being written in the same
+   transaction — Chromium aborts the whole write with
+
+     UnknownError: Error preparing Blob/File data to be stored in object store
+
+   which takes the enclosing sync transaction down with it. An ArrayBuffer is
+   plain structured-clone data with no such handshake, so it always lands. */
 export interface CoverRecord {
   bookId: string;
-  blob: Blob;
+  data: ArrayBuffer;
+  /** image mime type, needed to rebuild a displayable Blob */
+  type: string;
+  /** rows written by earlier builds, which stored a Blob directly */
+  blob?: Blob;
 }
+
+/** A cover as something the DOM can show, whichever way the row was written. */
+export const coverToBlob = (c: CoverRecord): Blob =>
+  c.blob ?? new Blob([c.data], { type: c.type || 'image/jpeg' });
 
 export interface ProgressRecord {
   bookId: string;

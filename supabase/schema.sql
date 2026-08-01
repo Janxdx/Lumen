@@ -194,7 +194,37 @@ end $$;
 --  only ever touch rows whose user_id matches the caller's JWT — the
 --  client cannot opt out, so a bug in the app can't leak another user's
 --  data.
+--
+--  Two conditions, not one. Ownership is the obvious half. The second is
+--  that the account's email has actually been confirmed: a signed-in but
+--  unverified session is refused by the database, not merely hidden by the
+--  UI. That distinction matters because the anon key is public — anyone
+--  can talk to the API directly, so a check that only lives in React is
+--  decoration. Sync becomes possible the moment the link is clicked, with
+--  no re-deploy and no new session.
 -- ═══════════════════════════════════════════════════════════════════
+
+-- Reads the confirmation state out of `auth.users`, which the caller cannot
+-- select from directly — hence security definer, pinned search_path, and a
+-- body narrow enough that it can't leak anything but this one boolean.
+-- Self-hosting note: this is the only other Supabase-specific function
+-- besides auth.uid(); on your own server it becomes a lookup in whatever
+-- table holds your users.
+create or replace function public.email_verified()
+returns boolean
+language sql
+stable
+security definer
+set search_path = auth, public
+as $$
+  select coalesce(
+    (select email_confirmed_at is not null from auth.users where id = auth.uid()),
+    false
+  )
+$$;
+
+revoke all on function public.email_verified() from public;
+grant execute on function public.email_verified() to authenticated;
 
 alter table public.books     enable row level security;
 alter table public.progress  enable row level security;
@@ -214,8 +244,9 @@ begin
     execute format(
       'create policy %I on public.%I
          for all
-         using (user_id = auth.uid())
-         with check (user_id = auth.uid())',
+         to authenticated
+         using (user_id = auth.uid() and public.email_verified())
+         with check (user_id = auth.uid() and public.email_verified())',
       t || '_owner', t
     );
   end loop;
@@ -240,20 +271,28 @@ drop policy if exists "books delete own" on storage.objects;
 
 create policy "books read own" on storage.objects
   for select using (
-    bucket_id = 'books' and (storage.foldername(name))[1] = auth.uid()::text
+    bucket_id = 'books'
+    and (storage.foldername(name))[1] = auth.uid()::text
+    and public.email_verified()
   );
 
 create policy "books write own" on storage.objects
   for insert with check (
-    bucket_id = 'books' and (storage.foldername(name))[1] = auth.uid()::text
+    bucket_id = 'books'
+    and (storage.foldername(name))[1] = auth.uid()::text
+    and public.email_verified()
   );
 
 create policy "books update own" on storage.objects
   for update using (
-    bucket_id = 'books' and (storage.foldername(name))[1] = auth.uid()::text
+    bucket_id = 'books'
+    and (storage.foldername(name))[1] = auth.uid()::text
+    and public.email_verified()
   );
 
 create policy "books delete own" on storage.objects
   for delete using (
-    bucket_id = 'books' and (storage.foldername(name))[1] = auth.uid()::text
+    bucket_id = 'books'
+    and (storage.foldername(name))[1] = auth.uid()::text
+    and public.email_verified()
   );
