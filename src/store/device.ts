@@ -149,6 +149,11 @@ export const useDevice = create<DeviceState>((set, get) => ({
     if (match) record.bookId = match;
 
     await db.deviceBooks.put(record);
+    // a book can arrive already partway read — a linked pick from the
+    // library, or a starting page typed in on the way — and that position
+    // is exactly what the library push exists to notice, same as any later
+    // update to it
+    if (record.bookId) await recomputeBook(id);
     await get().load();
     changed();
     return id;
@@ -158,11 +163,20 @@ export const useDevice = create<DeviceState>((set, get) => ({
     const next = { ...patch, updatedAt: Date.now() };
     await db.deviceBooks.update(id, next);
 
-    /* Changing the page count changes what every past session meant. Rather
-       than silently leaving stale numbers in the statistics, recompute the
-       mirrored sessions and the position from the new geometry — this is
-       exactly the "I mistyped 300 for 400 pages" case, and it should heal. */
-    if (patch.pages != null || patch.startPage != null || patch.bookId !== undefined) {
+    /* Changing the page count changes what every past session meant, and
+       moving the current page — whether typed or set from a scan, e.g. the
+       standalone "Scan my page" button, which patches only `currentPage`/
+       `currentLocus` and never touches a session — is itself the position
+       the library push in `recomputeBook` exists to notice. Recomputing on
+       any of the four keeps the two rules from stage 1 and stage 2 in sync
+       with what actually changed, rather than silently skipping the push
+       whenever nothing about the book's *geometry* changed. */
+    if (
+      patch.pages != null ||
+      patch.startPage != null ||
+      patch.bookId !== undefined ||
+      patch.currentPage != null
+    ) {
       await recomputeBook(id);
     }
     await get().load();
