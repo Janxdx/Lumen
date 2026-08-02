@@ -2,15 +2,17 @@ import { useMemo, useRef, useState } from 'react';
 import { useLibrary } from '../store/library';
 import { useRatings } from '../store/ratings';
 import { BookCover } from './BookCover';
-import { IconCloud, IconPlus, IconStar, IconTrash } from './Icons';
+import { IconCloud, IconImage, IconPlus, IconStar, IconTrash } from './Icons';
 import { formatDuration, relativeDate } from '../engine/stats';
 import { RatingSheet } from './RatingSheet';
+import { ScanSheet } from './ScanSheet';
 import { Sheet } from './Sheet';
 import { useDarkTheme } from './theme';
 import type { BookRecord } from '../db';
 
 export function Library({ onOpen }: { onOpen: (id: string) => void }) {
-  const { books, progress, covers, sessions, importFile, importing, remove } = useLibrary();
+  const { books, progress, covers, sessions, importFile, importing, remove, saveProgress } =
+    useLibrary();
   const fileInput = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [detail, setDetail] = useState<BookRecord | null>(null);
@@ -20,6 +22,9 @@ export function Library({ onOpen }: { onOpen: (id: string) => void }) {
      here — a feature reachable only from its own tab is a feature nobody
      remembers exists. */
   const [rating, setRating] = useState<BookRecord | null>(null);
+  /* The paper copy is the other place a book gets read. Scanning a page of
+     it is how the app catches up with a week away from the screen. */
+  const [scanning, setScanning] = useState<BookRecord | null>(null);
   const ratings = useRatings((s) => s.ratings);
   const dark = useDarkTheme();
   const ratingFor = (id: string) => ratings.find((r) => r.bookId === id);
@@ -273,6 +278,18 @@ export function Library({ onOpen }: { onOpen: (id: string) => void }) {
                 <IconStar size={16} solid={Boolean(ratingFor(detail.id))} />
                 {ratingFor(detail.id) ? `Rated ${ratingFor(detail.id)?.overall}` : 'Rate'}
               </button>
+              {!detail.fileMissing && (
+                <button
+                  className="btn"
+                  onClick={() => {
+                    const book = detail;
+                    setDetail(null);
+                    setScanning(book);
+                  }}
+                >
+                  <IconImage size={16} /> Find my place
+                </button>
+              )}
               <button
                 className="btn"
                 onClick={() => {
@@ -286,6 +303,35 @@ export function Library({ onOpen }: { onOpen: (id: string) => void }) {
           </div>
         )}
       </Sheet>
+
+      {scanning && (
+        <ScanSheet
+          open
+          onClose={() => setScanning(null)}
+          bookId={scanning.id}
+          spine={scanning.spine}
+          title={scanning.meta.title}
+          action="Open the book here"
+          describe={(locus) => {
+            const chapter =
+              scanning.toc.find((t) => t.spineIndex === locus.spineIndex)?.label ??
+              `Chapter ${locus.spineIndex + 1}`;
+            return `${chapter} · ${Math.round(locus.percent * 100)}% through`;
+          }}
+          onLocated={async (locus) => {
+            const id = scanning.id;
+            await saveProgress({
+              bookId: id,
+              spineIndex: locus.spineIndex,
+              wordIndex: locus.wordIndex,
+              percent: locus.percent,
+              updatedAt: Date.now(),
+            });
+            setScanning(null);
+            onOpen(id);
+          }}
+        />
+      )}
 
       <RatingSheet
         open={Boolean(rating)}

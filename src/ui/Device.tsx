@@ -12,6 +12,7 @@ import { BookCover } from './BookCover';
 import { Sheet } from './Sheet';
 import {
   IconCheck,
+  IconImage,
   IconLink,
   IconPause,
   IconPlay,
@@ -20,11 +21,13 @@ import {
   IconTimer,
   IconTrash,
 } from './Icons';
+import { ScanPanel } from './ScanSheet';
 import { formatCount, formatDuration, relativeDate, wpm } from '../engine/stats';
 import {
   pageToPercent,
   pagesPerHour,
   pagesToWords,
+  percentToPage,
   remaining,
   wordsPerPage,
 } from '../engine/device';
@@ -306,6 +309,7 @@ export function Device() {
       <FinishSheet
         open={finishing && !!timer && !!timerBook}
         book={timerBook}
+        linkedBook={library.find((b) => b.id === timerBook?.bookId) ?? null}
         fromPage={timer?.fromPage ?? 0}
         ms={elapsedOf(timer)}
         sessions={timerBook ? byBook[timerBook.id] ?? [] : []}
@@ -497,6 +501,7 @@ function AddSheet({
 function FinishSheet({
   open,
   book,
+  linkedBook,
   fromPage,
   ms,
   sessions,
@@ -506,6 +511,8 @@ function FinishSheet({
 }: {
   open: boolean;
   book: DeviceBookRecord | null;
+  /** the same book in the library, when there is one and its EPUB is here */
+  linkedBook: BookRecord | null;
   fromPage: number;
   ms: number;
   sessions: { ms: number; pages: number; start: number }[];
@@ -515,6 +522,7 @@ function FinishSheet({
 }) {
   const [toPage, setToPage] = useState('');
   const [note, setNote] = useState('');
+  const [scanning, setScanning] = useState(false);
 
   /* Prefill with what your own pace says you probably reached. It is a
      guess and is labelled as one, but it is a far better starting point
@@ -531,10 +539,40 @@ function FinishSheet({
     if (open) {
       setToPage(guess ? String(guess) : '');
       setNote('');
+      setScanning(false);
     }
   }, [open, guess]);
 
   if (!book) return null;
+
+  /* Scanning needs the book's own words, so it is offered only when the
+     EPUB is on this device. Everywhere else the page number is the only
+     bridge there is, and asking for it plainly is better than offering a
+     shortcut that turns out not to work. */
+  const canScan = !!linkedBook && !linkedBook.fileMissing;
+
+  if (scanning && linkedBook) {
+    return (
+      <Sheet open={open} onClose={onClose}>
+        <ScanPanel
+          open
+          onClose={() => setScanning(false)}
+          bookId={linkedBook.id}
+          spine={linkedBook.spine}
+          title={book.title}
+          action="Use as the page I stopped on"
+          cancelLabel="Back"
+          describe={(locus) =>
+            `page ${percentToPage(book, locus.percent)} · ${Math.round(locus.percent * 100)}% through`
+          }
+          onLocated={(locus) => {
+            setToPage(String(percentToPage(book, locus.percent)));
+            setScanning(false);
+          }}
+        />
+      </Sheet>
+    );
+  }
 
   const to = Number(toPage) || 0;
   const pages = Math.max(0, to - fromPage);
@@ -563,6 +601,17 @@ function FinishSheet({
                 : `You'd read to page ${fromPage} before this session.`
             }
           />
+
+          {canScan && (
+            <button
+              className="btn ghost"
+              style={{ justifyContent: 'center' }}
+              onClick={() => setScanning(true)}
+            >
+              <IconImage size={15} /> Don't know the page? Scan it
+            </button>
+          )}
+
           <Field
             label="Note"
             value={note}
@@ -652,14 +701,40 @@ function BookDetail({
 }) {
   const [editing, setEditing] = useState(false);
   const [logging, setLogging] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
 
+  const canScan = !!linkedBook && !linkedBook.fileMissing;
   const percent = pageToPercent(book, book.currentPage);
   const ms = sessions.reduce((a, s) => a + s.ms, 0);
   const pages = sessions.reduce((a, s) => a + s.pages, 0);
   const words = sessions.reduce((a, s) => a + s.words, 0);
   const left = remaining(book, book.currentPage, sessions);
   const density = wordsPerPage(book, totalWords);
+
+  /* The panel takes over the whole sheet rather than appearing below the
+     statistics: reading a page off a camera wants the screen, and the
+     numbers will still be here — corrected — when it hands back. */
+  if (scanning && linkedBook) {
+    return (
+      <ScanPanel
+        open
+        onClose={() => setScanning(false)}
+        bookId={linkedBook.id}
+        spine={linkedBook.spine}
+        title={book.title}
+        action="Set as my current page"
+        cancelLabel="Back"
+        describe={(locus) =>
+          `page ${percentToPage(book, locus.percent)} of ${book.pages} · ${Math.round(locus.percent * 100)}%`
+        }
+        onLocated={(locus) => {
+          onUpdate({ currentPage: percentToPage(book, locus.percent) });
+          setScanning(false);
+        }}
+      />
+    );
+  }
 
   return (
     <div style={{ maxWidth: 620, margin: '0 auto' }}>
@@ -767,6 +842,11 @@ function BookDetail({
         <button className="btn" onClick={() => setLogging((v) => !v)}>
           <IconPlus size={15} /> Log past session
         </button>
+        {canScan && (
+          <button className="btn" onClick={() => setScanning(true)}>
+            <IconImage size={15} /> Scan my page
+          </button>
+        )}
         <button className="btn ghost" onClick={() => setEditing((v) => !v)}>
           Edit details
         </button>
