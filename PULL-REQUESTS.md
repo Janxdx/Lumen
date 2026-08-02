@@ -14,7 +14,7 @@ no-op for it — the branch just has no PR open yet.
 
 ## 1 · `feat/device-sync` → `main`
 
-**Title:** Lumen Worker backend, device auth, and pace-aware stats
+**Title:** Soluna Worker backend, device auth, and pace-aware stats
 
 1 commit · 34 files · +5682 −456
 

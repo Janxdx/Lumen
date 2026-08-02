@@ -1,4 +1,4 @@
-/* The Cloudflare Worker adapter — Lumen's own backend.
+/* The Cloudflare Worker adapter — Soluna's own backend.
 
    Everything here talks to the same origin the app is served from, which is
    what makes the session a cookie rather than a token. `credentials:
@@ -167,8 +167,8 @@ const files: FileStore = {
 
 /* ── the backend ───────────────────────────────────────────────────── */
 
-export const lumenBackend: Backend = {
-  kind: 'lumen',
+export const solunaBackend: Backend = {
+  kind: 'soluna',
   auth,
   files,
   zeroCursor: 0,

@@ -493,9 +493,9 @@ function NotConfigured() {
         </div>
         <h1 className="display">Sync is switched off</h1>
         <p className="auth-lede">
-          Lumen is running without a backend, so everything stays on this device.
+          Soluna is running without a backend, so everything stays on this device.
           Remove <code>VITE_BACKEND=none</code> from your environment to use
-          Lumen's own Worker — same origin, nothing else to configure — and
+          Soluna's own Worker — same origin, nothing else to configure — and
           accounts appear here.
         </p>
       </div>

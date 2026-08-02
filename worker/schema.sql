@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════════
---  Lumen — D1 schema
+--  Soluna — D1 schema
 --
 --  Applied automatically: `npm run deploy` runs this against the remote
 --  database first (the `predeploy` script in package.json calls

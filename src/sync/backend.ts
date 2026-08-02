@@ -1,6 +1,6 @@
-/* What Lumen needs from a server, and nothing about who provides it.
+/* What Soluna needs from a server, and nothing about who provides it.
 
-   One implementation sits behind this file: the Lumen Worker on Cloudflare
+   One implementation sits behind this file: the Soluna Worker on Cloudflare
    (D1 + R2). The port stays regardless — the sync loop, the stores and the
    UI cannot tell which backend is running, so a future adapter is a new
    file and an env var, not a rewrite.
@@ -133,7 +133,7 @@ export interface AuthBackend {
 }
 
 export interface Backend {
-  readonly kind: 'lumen';
+  readonly kind: 'soluna';
   readonly auth: AuthBackend;
   readonly files: FileStore;
   pull(cursor: Cursor): Promise<Pulled>;

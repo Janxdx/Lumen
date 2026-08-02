@@ -19,6 +19,28 @@ introduced.
 - `6adad35` (merged as `286f00a`) — **find your place by scanning a page**.
 - **rate limiting across the whole API** (below).
 - **Supabase removed; D1 schema now deploys itself** (below).
+- **renamed from Lumen to Soluna** (below).
+
+## Renamed from Lumen to Soluna
+
+The app is Soluna, the project is Soluna Reader, the domain is
+`readsoluna.com`. `RENAME.md` is the full record and should be deleted once
+the migration is finished.
+
+Two things not to re-derive. First, the persisted keys were renamed along
+with everything else — the Dexie database, `localStorage`, the session
+cookie, the SW cache, the `soluna:changed` event. That is normally data
+loss, and it was free exactly once, because renaming the Worker changes the
+origin and all four of those are scoped per origin. Second, `database_id`
+in `wrangler.jsonc` is a **placeholder on purpose** and deploys fail until
+`scripts/rename-to-soluna.sh` has run and its output is pasted in. A valid
+old id there would ship the renamed Worker against the old database
+silently, which is worse than a failed deploy.
+
+The script copies R2 objects as well as D1 rows, and takes the object keys
+from `books.file_path` / `books.cover_path` rather than listing the bucket.
+Rows without objects would be a library where every download 404s —
+`file_path` is what marks a book as uploaded.
 
 ## Rate limiting
 
@@ -57,7 +79,7 @@ Jan works solo and only ever runs against Cloudflare, so the Supabase
 adapter (`src/sync/adapters/supabase.ts`), the `supabase/` folder, and
 `@supabase/supabase-js` are gone. `src/sync/backend.ts` stays as the seam —
 a future adapter is a new file behind it, not a rewrite — but `Backend.kind`
-is now just `'lumen'` and `src/sync/client.ts` only chooses between the
+is now just `'soluna'` and `src/sync/client.ts` only chooses between the
 Worker and `VITE_BACKEND=none`.
 
 The `ratings` table going missing in prod (2026-08-02) was the reminder that

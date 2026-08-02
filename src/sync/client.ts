@@ -2,7 +2,7 @@
 
    Two states, and the app is fully usable in both:
 
-     lumen  — Lumen's own Worker on Cloudflare (D1 + R2). Same origin as the
+     soluna  — Soluna's own Worker on Cloudflare (D1 + R2). Same origin as the
               app, so there is nothing to configure: no project URL, no key,
               no SDK.
      none   — no server at all. The reader is local-first, so this is a
@@ -13,16 +13,16 @@
    (including unset) means the Worker. */
 
 import type { Backend } from './backend';
-import { lumenBackend } from './adapters/lumen';
+import { solunaBackend } from './adapters/soluna';
 
-type Choice = 'lumen' | 'none';
+type Choice = 'soluna' | 'none';
 
 const preference = ((import.meta.env ?? ({} as ImportMetaEnv)).VITE_BACKEND?.trim() ??
   '') as Choice | '';
 
-const chosen: Choice = preference === 'none' ? 'none' : 'lumen';
+const chosen: Choice = preference === 'none' ? 'none' : 'soluna';
 
-export const backend: Backend | null = chosen === 'lumen' ? lumenBackend : null;
+export const backend: Backend | null = chosen === 'soluna' ? solunaBackend : null;
 
 export const syncEnabled = backend !== null;
 

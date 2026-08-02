@@ -1,4 +1,4 @@
-# Getting Lumen running — step by step
+# Getting Soluna running — step by step
 
 Two parts. **Part A** gets it working on your own Mac in about five minutes,
 costs nothing, and needs no accounts. **Part B** puts it on the internet.
@@ -28,7 +28,7 @@ have one, this is where you make it.
 ### A2. Create the database
 
 ```sh
-npx wrangler d1 create lumen
+npx wrangler d1 create soluna
 ```
 
 It prints a block that looks like this:
@@ -36,7 +36,7 @@ It prints a block that looks like this:
 ```
 [[d1_databases]]
 binding = "DB"
-database_name = "lumen"
+database_name = "soluna"
 database_id = "a1b2c3d4-5678-90ab-cdef-1234567890ab"
 ```
 
@@ -47,7 +47,7 @@ says `"database_id": "REPLACE_WITH_YOUR_D1_ID"`, and paste it in place of
 ### A3. Create the file storage
 
 ```sh
-npx wrangler r2 bucket create lumen-books
+npx wrangler r2 bucket create soluna-books
 ```
 
 > If this one fails saying R2 isn't enabled, go to the Cloudflare dashboard →
@@ -132,8 +132,8 @@ Paste the key when it asks. It is not stored in any file.
 Open `wrangler.jsonc` and change these two lines:
 
 ```jsonc
-"APP_ORIGIN": "https://lumen.yourdomain.com",
-"MAIL_FROM": "Lumen <lumen@yourdomain.com>"
+"APP_ORIGIN": "https://readsoluna.com",
+"MAIL_FROM": "Soluna <hello@readsoluna.com>"
 ```
 
 `APP_ORIGIN` must be **exactly** the address you will type into the browser —
@@ -155,8 +155,8 @@ the moment you deploy it, no extra command to remember.
 
 ### B5. Attach the domain
 
-Cloudflare dashboard → Workers & Pages → **lumen** → Settings → Domains &
-Routes → **Add** → Custom Domain → enter `lumen.yourdomain.com`.
+Cloudflare dashboard → Workers & Pages → **soluna** → Settings → Domains &
+Routes → **Add** → Custom Domain → enter `readsoluna.com`.
 
 Give it a minute, then open it. Sign in with your real email — this time the
 link actually arrives in your inbox.

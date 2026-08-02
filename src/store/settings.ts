@@ -41,7 +41,7 @@ export const useSettings = create<Settings>()(
         set((s) => ({ pacer: { ...s.pacer, ...patch } })),
     }),
     {
-      name: 'lumen.settings',
+      name: 'soluna.settings',
       version: 2,
       // v1 stored the rhythm as an on/off flag; carry the choice over
       migrate: (state, from) => {

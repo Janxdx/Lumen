@@ -1,4 +1,4 @@
-# Lumen — Reader App
+# Soluna — Reader App
 
 A beautiful EPUB reader for iPad (and iPhone/Mac), built web-first as an installable PWA, structured so the reader engine ports into a native shell later.
 

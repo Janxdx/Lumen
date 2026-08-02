@@ -1,4 +1,4 @@
-# Lumen
+# Soluna
 
 An EPUB reader for iPad, iPhone and Mac. Web-first, installable, offline.
 See [DESIGN.md](./DESIGN.md) for the design language and architecture.
@@ -55,7 +55,7 @@ only ever serves the app itself.
 
 ## Accounts and sync
 
-Backed by Lumen's own Worker — Cloudflare D1 for rows, R2 for files. Same
+Backed by Soluna's own Worker — Cloudflare D1 for rows, R2 for files. Same
 origin as the app, so there is nothing to configure and no key in
 JavaScript; the session lives in an HttpOnly cookie. Optional in the sense
 that `VITE_BACKEND=none` turns it off entirely, but on by default: no setup
@@ -69,7 +69,7 @@ account.
 **Schema deploys itself.** `worker/schema.sql` is idempotent
 (`create table if not exists`) and runs automatically before every
 `npm run deploy` — `predeploy` in `package.json` calls `npm run db:remote`
-(`wrangler d1 execute lumen --remote --file worker/schema.sql`) ahead of
+(`wrangler d1 execute soluna --remote --file worker/schema.sql`) ahead of
 `wrangler deploy`. A release that adds a table, like `ratings`, no longer
 depends on remembering to apply it by hand; it is live in prod the moment
 the deploy finishes. Run `npm run db:local` once yourself for local
@@ -93,7 +93,7 @@ all* fetches everything up front for a flight.
 
 The whole backend is one Cloudflare account: `wrangler deploy` ships the
 Worker, D1 database and R2 bucket together, and `worker/README.md` covers
-provisioning them from scratch. `src/sync/adapters/lumen.ts` is the only
+provisioning them from scratch. `src/sync/adapters/soluna.ts` is the only
 file that talks to it; `src/sync/sync.ts` and `src/sync/mapping.ts` are the
 only files that name tables or storage paths. Replacing the backend
 entirely — a different provider, a different database — means rewriting
@@ -180,7 +180,7 @@ src/db/         IndexedDB (Dexie): books, files, covers, progress, sessions,
 src/store/      settings, library and account state
 src/sync/       the only code that knows a backend exists
   client.ts     picks the backend (the Worker, or none); VITE_BACKEND=none disables sync
-  adapters/     lumen.ts — the Worker adapter (D1 + R2)
+  adapters/     soluna.ts — the Worker adapter (D1 + R2)
   mapping.ts    local record ⇄ wire row
   sync.ts       pull → merge → push, plus file upload/download
 src/ui/         Library, Reader, Pacer controls, Device shelf, Shelf (ratings),
@@ -190,7 +190,7 @@ tests/          run with `npm test` — the page↔word maths, the rating and
                 no build step and no test framework: Node strips the types
                 itself and `register.mjs` teaches it the extensionless
                 imports a bundler would resolve
-worker/         the Lumen Worker — API, auth, rate limiting, D1 schema
+worker/         the Soluna Worker — API, auth, rate limiting, D1 schema
 ```
 
 `engine/` is deliberately free of React so it can move into a native shell

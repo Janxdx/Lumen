@@ -3,7 +3,7 @@
    Deliberately tiny. There is no password hashing here and that is the
    point: on the Workers free plan a request gets 10ms of CPU, and an honest
    password hash costs twenty times that. Tuning one down to fit would mean
-   storing a hash weak enough to be worth cracking, so Lumen has no
+   storing a hash weak enough to be worth cracking, so Soluna has no
    passwords at all — a magic link proves you own the address, a passkey
    proves you hold the key, and both are verified in well under a
    millisecond. */

@@ -55,7 +55,7 @@ import {
 } from './mapping';
 
 const META_KEY = 'sync';
-const SETTINGS_AT = 'lumen.settings.at';
+const SETTINGS_AT = 'soluna.settings.at';
 
 interface SyncMeta {
   /** how far this device has read the server's change log */
@@ -663,7 +663,7 @@ export function initSync(): void {
   /* Local writes are chatty — progress is saved on every page turn — so
      they get debounced rather than firing a round trip each time. */
   let timer: ReturnType<typeof setTimeout> | undefined;
-  addEventListener('lumen:changed', () => {
+  addEventListener('soluna:changed', () => {
     clearTimeout(timer);
     timer = setTimeout(trigger, 8000);
   });

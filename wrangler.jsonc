@@ -5,7 +5,7 @@
 	//
 	// Same origin for both is deliberate — it is what lets the session live
 	// in an HttpOnly cookie instead of a token in JavaScript.
-	"name": "lumen",
+	"name": "soluna",
 	"main": "worker/index.ts",
 	"compatibility_date": "2026-07-27",
 	"compatibility_flags": [
@@ -36,21 +36,27 @@
 		// to be the address people actually use — change it when you attach a
 		// custom domain, or every assertion will be refused by the browser.
 		"APP_ORIGIN": "http://localhost:8787",
-		"MAIL_FROM": "Lumen <lumen@example.com>"
+		"MAIL_FROM": "Soluna <hello@readsoluna.com>"
 	},
 	"d1_databases": [
 		{
 			// `binding` is the name the code uses: env.DB in worker/data.ts.
 			// It is not the database's name and does not have to match it.
 			"binding": "DB",
-			"database_name": "lumen",
-			"database_id": "a255e5ef-3836-4c3f-aa97-dd0bb06f6929"
+			"database_name": "soluna",
+			// Deliberately unset until the rename migration has run. The old
+			// database is still called `lumen` and still holds every row; a
+			// valid id here would let `npm run deploy` quietly ship the
+			// renamed Worker against the old database, which is the one
+			// outcome worth failing loudly to avoid. Run
+			// `scripts/rename-to-soluna.sh`, then paste the id it prints.
+			"database_id": "PASTE_AFTER_RUNNING_scripts/rename-to-soluna.sh"
 		}
 	],
 	"r2_buckets": [
 		{
 			"binding": "BOOKS",
-			"bucket_name": "lumen-books"
+			"bucket_name": "soluna-books"
 		}
 	],
 	// ── rate limiting ────────────────────────────────────────────────

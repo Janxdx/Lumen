@@ -1,4 +1,4 @@
-# Lumen's own backend
+# Soluna's own backend
 
 Auth, database and file storage on your Cloudflare account. No Supabase, no
 monthly bill, no vendor holding your library.
@@ -98,8 +98,8 @@ be the worse failure.
 ### 1. Create the resources
 
 ```sh
-npx wrangler d1 create lumen          # copy the printed database_id
-npx wrangler r2 bucket create lumen-books
+npx wrangler d1 create soluna          # copy the printed database_id
+npx wrangler r2 bucket create soluna-books
 ```
 
 Put the `database_id` into `wrangler.jsonc` where it says
@@ -172,7 +172,7 @@ the migration was verified. `src/sync/backend.ts` is still the seam, so a
 future adapter is a new file behind it rather than a rewrite.
 
 ```sh
-VITE_BACKEND=lumen   # the Worker (default; also what unset means)
+VITE_BACKEND=soluna   # the Worker (default; also what unset means)
 VITE_BACKEND=none    # local only, no account screen, no network
 ```
 

@@ -52,7 +52,7 @@ export async function readJson<T>(req: Request): Promise<T> {
    moment the flow depends on. Lax keeps top-level navigations and still
    refuses cross-site form posts, which is the attack it exists to stop. */
 
-export const SESSION_COOKIE = 'lumen_session';
+export const SESSION_COOKIE = 'soluna_session';
 
 /* `Secure` is set for https and omitted for http.
 

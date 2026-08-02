@@ -1,4 +1,4 @@
-/* The Lumen Worker.
+/* The Soluna Worker.
 
    One entry point, three kinds of request:
 

@@ -1,4 +1,4 @@
-# Lumen — data access & attack surface review
+# Soluna — data access & attack surface review
 
 **Date:** 2026-08-02 · **Branch:** `develop` @ `286f00a` · **Scope:** every path that reads or writes
 persisted data — Cloudflare D1, R2, Supabase Postgres + Storage, and the on-device Dexie/IndexedDB
@@ -252,7 +252,7 @@ on the attribute string can be fooled).
 
 ### 3. High — the Supabase session JWT sits in `localStorage`
 
-**Where:** `src/sync/adapters/supabase.ts:47–52` — `persistSession: true, storageKey: 'lumen.auth'`.
+**Where:** `src/sync/adapters/supabase.ts:47–52` — `persistSession: true, storageKey: 'soluna.auth'`.
 
 On this backend the access token is readable by any script on the origin. Combined with finding 1,
 an XSS is no longer confined to the device: the attacker walks away with a bearer token they can
@@ -332,7 +332,7 @@ contentType: kind === 'epub' ? 'application/epub+zip' : 'application/octet-strea
 headers.set('x-content-type-options', 'nosniff');
 headers.set('content-disposition', 'attachment');
 ```
-The client only ever consumes these as blobs (`adapters/lumen.ts:130`, `:139`), so neither change
+The client only ever consumes these as blobs (`adapters/soluna.ts:130`, `:139`), so neither change
 affects behaviour.
 
 ### 6. Medium — unauthenticated, unrate-limited database writes
@@ -439,7 +439,7 @@ the fail-open.
 from nowhere.
 
 Deletions arrive as tombstones (`deleted: 1`) and the client calls `DELETE /api/files/...` itself
-(`adapters/lumen.ts:145`), so in the normal path the object does get removed. But nothing on the
+(`adapters/soluna.ts:145`), so in the normal path the object does get removed. But nothing on the
 server enforces it: if the client is offline, closed, or crashes between pushing the tombstone and
 issuing the deletes, the EPUB stays in R2 indefinitely with no UI that will ever offer to remove it
 again. From a privacy standpoint, "delete" should mean the bytes are gone.
@@ -450,14 +450,14 @@ add an account-deletion path — right now there is no way to delete an account 
 
 ### 12. Low — session cookie lacks the `__Host-` prefix
 
-**Where:** `worker/http.ts:64` (`SESSION_COOKIE = 'lumen_session'`), `:70–79`.
+**Where:** `worker/http.ts:64` (`SESSION_COOKIE = 'soluna_session'`), `:70–79`.
 
 `HttpOnly` and `SameSite=Lax` are both right, and the conditional `Secure` is well-reasoned for
-localhost. Naming the cookie `__Host-lumen_session` in production would additionally guarantee it
-cannot be set by a sibling subdomain — relevant if Lumen ever shares a registrable domain with
+localhost. Naming the cookie `__Host-soluna_session` in production would additionally guarantee it
+cannot be set by a sibling subdomain — relevant if Soluna ever shares a registrable domain with
 anything else. `__Host-` requires `Secure` and no `Domain`, both of which already hold over https.
 
-**Fix:** derive the name from the scheme the same way `secure()` does — `__Host-lumen_session` over
+**Fix:** derive the name from the scheme the same way `secure()` does — `__Host-soluna_session` over
 https, plain name over http for dev.
 
 ### 13. Low — the one un-parameterised SQL fragment
