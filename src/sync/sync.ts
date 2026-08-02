@@ -139,11 +139,10 @@ export const useSync = create<SyncState>((set, get) => ({
         set({ status: 'idle', step: null });
         return;
       }
-      /* An unproven address syncs nothing. On the Worker this cannot happen
-         — an account only exists once a link has been opened — but Supabase
-         will hand out a session first, and its policies then refuse every
-         table. Failing here means one honest sentence instead of seven
-         permission errors and a half-finished push to reconcile. */
+      /* An unproven address syncs nothing. On the Worker this cannot
+         actually happen — an account only exists once a link has been
+         opened — but the check stays cheap insurance: failing here means
+         one honest sentence instead of a half-finished push to reconcile. */
       if (!user.verified) {
         set({ status: 'unverified', step: null, error: null });
         return;

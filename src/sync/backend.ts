@@ -1,11 +1,9 @@
 /* What Lumen needs from a server, and nothing about who provides it.
 
-   Two implementations sit behind this file: the Supabase adapter that has
-   been carrying sync so far, and the Lumen Worker on Cloudflare. The point
-   of the seam is that the sync loop, the stores and the UI cannot tell
-   which one is running — so the move from one to the other is a change of
-   adapter and an env var, not a rewrite, and it stays reversible for as
-   long as both adapters exist.
+   One implementation sits behind this file: the Lumen Worker on Cloudflare
+   (D1 + R2). The port stays regardless — the sync loop, the stores and the
+   UI cannot tell which backend is running, so a future adapter is a new
+   file and an env var, not a rewrite.
 
    The division of labour is deliberate. An adapter moves rows and files; it
    does not decide anything. All merge policy — last write wins, tombstones,
@@ -60,9 +58,9 @@ export const isEmpty = (c: Changes): boolean =>
   c.ratings.length === 0;
 
 /* The bookmark of how far a device has read the server's change log.
-   Opaque on purpose: Supabase stamps rows with a timestamp and the Worker
-   with a counter, and the sync loop should not have an opinion about which.
-   It stores whatever it was given and hands the same value back. */
+   Opaque on purpose: the Worker stamps rows with a counter, and the sync
+   loop should not have an opinion about the shape. It stores whatever it
+   was given and hands the same value back. */
 export type Cursor = string | number;
 
 export interface Pulled {
@@ -100,7 +98,7 @@ export interface Passkey {
 
 /* Not every backend can do everything, and the account screen should show
    what is actually available rather than offering a button that errors.
-   Supabase here means passwords; the Worker means links and passkeys. */
+   The Worker means magic links and passkeys — no passwords. */
 export interface AuthCapabilities {
   passwords: boolean;
   magicLink: boolean;
@@ -135,7 +133,7 @@ export interface AuthBackend {
 }
 
 export interface Backend {
-  readonly kind: 'supabase' | 'lumen';
+  readonly kind: 'lumen';
   readonly auth: AuthBackend;
   readonly files: FileStore;
   pull(cursor: Cursor): Promise<Pulled>;
