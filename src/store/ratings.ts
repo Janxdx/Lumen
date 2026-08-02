@@ -115,6 +115,8 @@ export const useRatings = create<RatingState>((set, get) => ({
     if (!current) return;
     const next: RatingRecord = { ...current, ...patch, id, updatedAt: Date.now() };
     if (patch.overall !== undefined) next.overall = clampScore(patch.overall);
+    // same rule as on create: a zero here is an axis nobody judged
+    if (patch.axes !== undefined) next.axes = pruneAxes(patch.axes);
     await db.ratings.put(next);
     set({ ratings: order(get().ratings.map((r) => (r.id === id ? next : r))) });
     changed();
