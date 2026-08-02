@@ -14,6 +14,23 @@ export interface Env {
   /** the built front-end, served for anything that isn't /api or /auth */
   ASSETS: Fetcher;
 
+  /* Rate limiting, applied in worker/limit.ts ahead of every handler.
+     Optional because a Worker deployed from a wrangler.jsonc that predates
+     them should still serve books — see the note on failing open there. */
+
+  /** short burst ceiling, per session */
+  RL_BURST?: RateLimit;
+  /** the same, per address — the one a forged cookie cannot escape */
+  RL_ADDRESS?: RateLimit;
+  /** sustained ceiling on reads that touch D1 */
+  RL_READ?: RateLimit;
+  /** sustained ceiling on /api/push, the write path */
+  RL_WRITE?: RateLimit;
+  /** the signed-out surface: passkeys, magic links */
+  RL_AUTH?: RateLimit;
+  /** EPUB and cover traffic against R2 */
+  RL_FILES?: RateLimit;
+
   /* ── vars ──────────────────────────────────────────────────────── */
 
   /** e.g. "https://lumen.example.com" — the canonical origin of the app */

@@ -52,6 +52,105 @@
 			"binding": "BOOKS",
 			"bucket_name": "lumen-books"
 		}
+	],
+	// ── rate limiting ────────────────────────────────────────────────
+	//
+	// Counters live at the edge, in the machine the Worker already runs on,
+	// so a call to limit() is not a network request and costs nothing. That
+	// is the whole reason they are here rather than in D1: a limiter that
+	// stores its own counters in the database adds two queries to every
+	// request it inspects, which means that under the flood it exists to
+	// stop, it is doubling the load. The one D1-backed limit that stays is
+	// the magic-link one in worker/auth.ts — it needs a fifteen-minute
+	// window and it must be right across every location, because what it is
+	// rationing is mail sent to a stranger's inbox.
+	//
+	// Two consequences of edge-local counters, both acceptable here:
+	// the window may only be 10 or 60 seconds, and the count is per
+	// Cloudflare location, so a globally distributed attacker gets one
+	// budget per city. Neither matters for a ceiling whose job is to make
+	// hammering pointless rather than to bill anyone accurately.
+	//
+	// `namespace_id` is an account-wide identifier, not a name: two
+	// bindings sharing one would share counters. Each of these is distinct.
+	"ratelimits": [
+		// ── the two walls every request passes ───────────────────────
+		{
+			// Burst, per caller. Ten seconds is short enough that a script
+			// notices immediately and a human never does.
+			"name": "RL_BURST",
+			"namespace_id": "1001",
+			"simple": {
+				"limit": 60,
+				"period": 10
+			}
+		},
+		{
+			// The same wall keyed by address instead of session, and the
+			// reason the others cannot be walked around: a caller who mints
+			// a fresh fake cookie per request gets a fresh per-session
+			// budget every time, and only an address-keyed ceiling still
+			// counts them as one. Deliberately loose — an address can be a
+			// household, an office or a whole mobile carrier, so this must
+			// sit far above anything real people do together.
+			"name": "RL_ADDRESS",
+			"namespace_id": "1002",
+			"simple": {
+				"limit": 300,
+				"period": 10
+			}
+		},
+		// ── then one ceiling for the kind of work being asked for ────
+		{
+			// Reads that touch D1: /api/pull, /auth/me, /auth/passkeys.
+			// A pull is eight statements in one batch, so it is not free.
+			"name": "RL_READ",
+			"namespace_id": "1003",
+			"simple": {
+				"limit": 120,
+				"period": 60
+			}
+		},
+		{
+			// Writes: /api/push. The expensive one — it bumps the user's
+			// counter and then upserts across eight tables. The client
+			// debounces local changes by eight seconds, so it cannot
+			// legitimately exceed about seven of these a minute.
+			"name": "RL_WRITE",
+			"namespace_id": "1004",
+			"simple": {
+				"limit": 30,
+				"period": 60
+			}
+		},
+		{
+			// The signed-out surface: passkey options and verification, the
+			// magic-link request and its callback. Tight on purpose. This is
+			// where credentials are guessed at and where mail is sent, and
+			// there is no honest reason to arrive here often — signing in is
+			// a handful of requests, once.
+			"name": "RL_AUTH",
+			"namespace_id": "1005",
+			"simple": {
+				"limit": 12,
+				"period": 60
+			}
+		},
+		{
+			// Files, in R2 rather than D1, but the same kind of damage: a
+			// PUT loop full of EPUBs costs storage and class-A operations.
+			// The headroom is large because the first sync of an existing
+			// library is a legitimate burst — syncFiles() walks every book
+			// back to back, two objects each, with nothing pacing it. At 240
+			// a minute that is a hundred and twenty books, which is a bigger
+			// shelf than this limit will ever meet.
+			"name": "RL_FILES",
+			"namespace_id": "1006",
+			"simple": {
+				"limit": 240,
+				"period": 60
+			}
+		}
 	]
 	// Secrets are not listed here — they are set once, and never committed:
 	//   npx wrangler secret put RESEND_API_KEY

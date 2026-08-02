@@ -36,6 +36,7 @@ import {
   unauthorized,
 } from './http';
 import { fromBase64Url, hashToken, newId, randomToken, toBase64Url, utf8 } from './crypto';
+import { clientIp } from './limit';
 import { sendLoginLink } from './mail';
 
 export interface User {
@@ -60,10 +61,21 @@ async function sweep(env: Env, now: number): Promise<void> {
 
 /* ── rate limiting ─────────────────────────────────────────────────
 
-   A fixed window per key. Crude — a burst can straddle a boundary and get
-   two windows' worth — but the thing being prevented is a stranger using
-   the endpoint to mail somebody repeatedly, and for that a rough ceiling
-   is entirely adequate. */
+   A fixed window per key, counted in D1. Crude — a burst can straddle a
+   boundary and get two windows' worth — but the thing being prevented is a
+   stranger using the endpoint to mail somebody repeatedly, and for that a
+   rough ceiling is entirely adequate.
+
+   This is the only limit left in the database, and the two reasons it did
+   not move to the edge bindings in worker/limit.ts are the two things those
+   cannot do: hold a window longer than a minute, and hold one count across
+   every Cloudflare location rather than one per city. Both are essential
+   here and nowhere else, because what is being rationed is not load
+   arriving at this Worker but mail arriving in somebody's inbox — five
+   messages is five messages wherever the requests were served from.
+
+   The endpoint is also behind RL_AUTH, which turns away the flood before it
+   reaches these queries. What survives that is what this counts. */
 
 async function limit(
   env: Env,
@@ -92,10 +104,6 @@ async function limit(
     .bind(key)
     .run();
 }
-
-/** The caller's address, as Cloudflare sees it. */
-const clientIp = (req: Request): string =>
-  req.headers.get('cf-connecting-ip') ?? 'unknown';
 
 /* ── sessions ──────────────────────────────────────────────────────── */
 
