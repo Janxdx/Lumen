@@ -191,3 +191,40 @@ export const IconKey = ({ size = 20, className }: P) => (
     <path d="m18.5 18.5 1.8-1.8" />
   </svg>
 );
+
+/* One star, drawn once and filled or not. Two separate paths would drift
+   apart the first time either is nudged. */
+const STAR =
+  'M12 3.6l2.42 4.9 5.41.79-3.92 3.82.93 5.39L12 15.95l-4.84 2.55.93-5.39L4.17 9.29l5.41-.79z';
+
+export const IconStar = ({ size = 20, className, solid }: P & { solid?: boolean }) => (
+  <svg {...base(size)} className={className} {...(solid ? { fill: 'currentColor' } : {})}>
+    <path d={STAR} />
+  </svg>
+);
+
+/** A shelf of standing books — the rating tab's own mark. */
+export const IconShelf = ({ size = 20, className }: P) => (
+  <svg {...base(size)} className={className}>
+    <path d="M4 20h16" />
+    <rect x="5" y="9" width="3.4" height="9" rx="1" />
+    <rect x="10" y="6" width="3.4" height="12" rx="1" />
+    <rect x="15" y="11" width="3.4" height="7" rx="1" />
+  </svg>
+);
+
+/** Save an image. */
+export const IconImage = ({ size = 20, className }: P) => (
+  <svg {...base(size)} className={className}>
+    <rect x="3.4" y="4.6" width="17.2" height="14.8" rx="2.6" />
+    <circle cx="8.6" cy="9.6" r="1.5" />
+    <path d="m4.2 16.6 4.3-4a1.6 1.6 0 0 1 2.2 0l3.1 3 1.6-1.5a1.6 1.6 0 0 1 2.2 0l2.2 2.1" />
+  </svg>
+);
+
+export const IconPencil = ({ size = 20, className }: P) => (
+  <svg {...base(size)} className={className}>
+    <path d="M4.5 19.5h3l9.6-9.6a2.1 2.1 0 0 0-3-3L4.5 16.5z" />
+    <path d="m14.4 5.6 3 3" />
+  </svg>
+);

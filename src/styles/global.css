@@ -1510,6 +1510,163 @@ input[type='range']::-moz-range-thumb {
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
+/* ── the shelf ────────────────────────────────────────────────────
+   The one screen in Lumen that spends colour. Everywhere else a single
+   warm accent does all the work and the palette stays out of the way;
+   here the colour *is* the data, and the restraint elsewhere is what
+   makes eight cloth colours land as meaning rather than as decoration. */
+
+.wall {
+  --slot-h: 250px;
+  --row-gap: 48px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--row-gap) 0;
+  padding-top: 6px;
+  /* The shelf line under each row. A repeating gradient rather than a
+     border on the slots: rows have a constant pitch, so this lands on
+     every baseline — including the ones wrapping has not made yet — and
+     the last row gets a full-width shelf instead of one that stops under
+     the final book. */
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--slot-h) + 6px),
+    var(--line-strong) calc(var(--slot-h) + 6px),
+    var(--line-strong) calc(var(--slot-h) + 8px),
+    rgba(0, 0, 0, 0.05) calc(var(--slot-h) + 8px),
+    transparent calc(var(--slot-h) + 18px),
+    transparent calc(var(--slot-h) + var(--row-gap))
+  );
+}
+@media (max-width: 640px) {
+  .wall {
+    --slot-h: 178px;
+    --row-gap: 36px;
+  }
+}
+
+/* Slots have no horizontal gap, so real books touch the way they do on a
+   real shelf. What separates them is the lit left edge and shadowed right
+   of each spine, which is also what gives the wall its depth. */
+.slot {
+  height: var(--slot-h);
+  display: flex;
+  align-items: flex-end;
+  flex: none;
+  animation: shelve 620ms var(--ease-out) both;
+}
+@keyframes shelve {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+}
+
+.spine {
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 13px 2px 11px;
+  border-radius: 1px 3px 3px 1px;
+  box-shadow:
+    inset -3px 0 6px rgba(0, 0, 0, 0.22),
+    inset 1px 0 0 rgba(255, 255, 255, 0.14),
+    0 2px 5px rgba(20, 14, 8, 0.22);
+  transition:
+    transform 380ms var(--ease-spring),
+    box-shadow 380ms var(--ease-spring);
+}
+.spine:hover,
+.spine:focus-visible,
+.spine.on {
+  /* pulled a little way off the shelf */
+  transform: translateY(-14px);
+  box-shadow:
+    inset -3px 0 6px rgba(0, 0, 0, 0.22),
+    inset 1px 0 0 rgba(255, 255, 255, 0.18),
+    0 14px 26px rgba(20, 14, 8, 0.3);
+  outline: none;
+}
+.spine:active {
+  transform: translateY(-6px);
+}
+
+/* the raised bands of a stitched binding */
+.spine .band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.24;
+}
+.spine .band.top {
+  top: 30px;
+}
+.spine .band.bottom {
+  bottom: 34px;
+}
+
+.spine .title {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-family: var(--font-read);
+  font-size: 13px;
+  line-height: 1;
+  letter-spacing: 0.005em;
+  margin: 9px 0 7px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.12);
+}
+@media (max-width: 640px) {
+  .spine .title {
+    font-size: 11.5px;
+  }
+}
+
+.spine .score {
+  flex: none;
+  font-family: var(--font-num);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.92;
+}
+
+/* the one gold thing in the app, and it costs a tap to earn */
+.spine .gilt {
+  position: absolute;
+  top: 11px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 5px;
+  height: 5px;
+  border-radius: var(--r-full);
+  background: currentColor;
+  box-shadow: 0 0 0 2.5px rgba(255, 255, 255, 0.14);
+}
+
+/* ── the mood mix, as one ribbon of cloth ─────────────────────── */
+.mood-ribbon {
+  display: flex;
+  height: 14px;
+  border-radius: var(--r-full);
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+.mood-ribbon i {
+  flex-basis: 0;
+  min-width: 4px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 1ms !important;
