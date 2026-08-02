@@ -12,7 +12,7 @@
     "worker": "npm run build && wrangler dev",
     "db:local": "wrangler d1 execute lumen --local --file worker/schema.sql",
     "db:remote": "wrangler d1 execute lumen --remote --file worker/schema.sql",
-    "test": "node --import ./tests/register.mjs tests/device-math.test.mts && node --import ./tests/register.mjs tests/device-store.test.mts && node --import ./tests/register.mjs tests/sync-merge.test.mts && node --import ./tests/register.mjs tests/passage-match.test.mts && node --import ./tests/register.mjs tests/rating.test.mts && node --import ./tests/register.mjs tests/rating-store.test.mts"
+    "test": "node --import ./tests/register.mjs tests/device-math.test.mts && node --import ./tests/register.mjs tests/device-store.test.mts && node --import ./tests/register.mjs tests/sync-merge.test.mts && node --import ./tests/register.mjs tests/passage-match.test.mts && node --import ./tests/register.mjs tests/rating.test.mts && node --import ./tests/register.mjs tests/rating-store.test.mts && node --import ./tests/register.mjs tests/passage-store.test.mts"
   },
   "dependencies": {
     "@simplewebauthn/browser": "^13.3.0",
@@ -22,6 +22,7 @@
     "fflate": "^0.8.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "tesseract.js": "^7.0.0",
     "zustand": "^4.5.5"
   },
   "devDependencies": {
