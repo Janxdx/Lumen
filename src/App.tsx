@@ -5,16 +5,18 @@ import { resolveTheme, useSettings } from './store/settings';
 import { initSync, useSync } from './sync/sync';
 import { syncEnabled } from './sync/client';
 import { useDevice } from './store/device';
+import { useRatings } from './store/ratings';
 import { Library } from './ui/Library';
 import { Stats } from './ui/Stats';
 import { Account } from './ui/Account';
 import { Device } from './ui/Device';
+import { Ratings } from './ui/Ratings';
 import { Reader } from './ui/Reader';
-import { IconAccount, IconDevice, IconLibrary, IconStats } from './ui/Icons';
+import { IconAccount, IconDevice, IconLibrary, IconShelf, IconStats } from './ui/Icons';
 
-type Tab = 'library' | 'device' | 'stats' | 'account';
+type Tab = 'library' | 'device' | 'shelf' | 'stats' | 'account';
 
-const TABS: Tab[] = ['library', 'device', 'stats', 'account'];
+const TABS: Tab[] = ['library', 'device', 'shelf', 'stats', 'account'];
 
 /* Which tab the address bar is asking for.
 
@@ -39,6 +41,7 @@ export default function App() {
 
   useEffect(() => {
     void load();
+    void useRatings.getState().load();
   }, [load]);
 
   /* The device shelf loads alongside the library, and every time the library
@@ -118,6 +121,8 @@ export default function App() {
         <Library onOpen={setReading} />
       ) : tab === 'device' ? (
         <Device />
+      ) : tab === 'shelf' ? (
+        <Ratings />
       ) : tab === 'stats' ? (
         <Stats />
       ) : (
@@ -135,6 +140,9 @@ export default function App() {
           <button className={tab === 'device' ? 'on' : ''} onClick={() => setTab('device')}>
             <IconDevice size={18} /> Reader
             {timerRunning && <i className="dot live" aria-hidden />}
+          </button>
+          <button className={tab === 'shelf' ? 'on' : ''} onClick={() => setTab('shelf')}>
+            <IconShelf size={18} /> Shelf
           </button>
           <button className={tab === 'stats' ? 'on' : ''} onClick={() => setTab('stats')}>
             <IconStats size={18} /> Statistics

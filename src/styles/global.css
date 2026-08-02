@@ -193,15 +193,20 @@ body::after {
   background: var(--surface);
   box-shadow: var(--shadow-1);
 }
-/* four tabs don't fit a phone at full width, so away from the iPad only the
+/* five tabs don't fit a phone at full width, so away from the iPad only the
    selected one keeps its label — the icons carry the rest */
-@media (max-width: 560px) {
+@media (max-width: 760px) {
   .tabbar button {
-    padding: 0 var(--s4);
+    padding: 0 var(--s3);
   }
   .tabbar button:not(.on) {
     font-size: 0;
     gap: 0;
+  }
+}
+@media (max-width: 400px) {
+  .tabbar button.on {
+    padding: 0 var(--s4);
   }
 }
 
@@ -1652,6 +1657,289 @@ input[type='range']::-moz-range-thumb {
   border-radius: var(--r-full);
   background: currentColor;
   box-shadow: 0 0 0 2.5px rgba(255, 255, 255, 0.14);
+}
+
+/* the generated sentence about the reader — set like a pull quote,
+   because it is the one place the app says something rather than
+   reporting something */
+.taste-line {
+  font-family: var(--font-read);
+  font-size: clamp(17px, 2.2vw, 22px);
+  line-height: 1.42;
+  color: var(--ink-2);
+  max-width: 34em;
+  margin: -8px 0 26px;
+}
+
+/* ── rating editor ────────────────────────────────────────────── */
+
+.rating-editor {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.score-dial {
+  margin: 26px 0 30px;
+}
+.score-read {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.score-read b {
+  font-family: var(--font-num);
+  font-size: clamp(44px, 9vw, 68px);
+  font-weight: 300;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.score-read span {
+  font-size: 14px;
+  color: var(--ink-3);
+}
+.score-read em {
+  margin-left: auto;
+  font-style: normal;
+  font-family: var(--font-read);
+  font-size: clamp(15px, 2.4vw, 19px);
+  color: var(--accent);
+}
+
+.score-rail {
+  position: relative;
+  height: 46px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  touch-action: none;
+  cursor: ew-resize;
+}
+.score-rail:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.score-rail .fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: calc(var(--r-md) - 1px);
+  background: var(--accent-soft);
+  transition: width 90ms linear;
+}
+/* the notches: whole numbers taller than halves, so the eye can count */
+.score-rail s {
+  position: absolute;
+  bottom: 7px;
+  width: 1px;
+  height: 6px;
+  margin-left: -0.5px;
+  background: var(--line-strong);
+}
+.score-rail s.whole {
+  height: 11px;
+}
+.score-rail .knob {
+  position: absolute;
+  top: 50%;
+  width: 26px;
+  height: 26px;
+  margin-left: -13px;
+  transform: translateY(-50%);
+  border-radius: var(--r-full);
+  background: var(--accent);
+  box-shadow: var(--shadow-1);
+  transition: left 90ms linear;
+  pointer-events: none;
+}
+.score-scale {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.score-scale span:nth-child(2) {
+  /* the middle label is the whole point of having labels at all */
+  color: var(--ink-2);
+}
+
+.rating-cols {
+  display: grid;
+  gap: var(--s5);
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  align-items: start;
+  margin-bottom: 22px;
+}
+@media (max-width: 620px) {
+  .rating-cols {
+    grid-template-columns: 1fr;
+  }
+}
+.rating-radar {
+  position: sticky;
+  top: 0;
+  padding-top: 18px;
+}
+
+.axis {
+  margin-bottom: 14px;
+}
+.axis-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 13px;
+  font-weight: 560;
+}
+.axis-head b {
+  font-family: var(--font-num);
+  font-weight: 600;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.pips {
+  display: flex;
+  gap: 3px;
+  margin: 5px 0 3px;
+}
+.pips button {
+  flex: 1;
+  height: 22px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  transition: background-color 160ms, border-color 160ms;
+}
+.pips button.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.pips button:hover {
+  border-color: var(--accent);
+}
+.axis-hint {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.mood-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.mood-swatch {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 12.5px;
+  font-weight: 540;
+  color: var(--ink-2);
+  transition: border-color 180ms, color 180ms, box-shadow 180ms;
+}
+.mood-swatch i {
+  flex: none;
+  width: 17px;
+  height: 22px;
+  border-radius: 2px 3px 3px 2px;
+  background: var(--c);
+  box-shadow: inset -2px 0 3px rgba(0, 0, 0, 0.25);
+}
+.mood-swatch.on {
+  color: var(--ink);
+  border-color: var(--c);
+  box-shadow: 0 0 0 2px var(--c);
+}
+
+.rating-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 24px;
+}
+
+/* ── picking something to rate, and the standout rows ──────────── */
+
+.pick-row,
+.standout {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--line);
+  transition: background-color 160ms;
+}
+.pick-row:hover,
+.standout:hover {
+  background: var(--surface-2);
+}
+.pick-row .n {
+  min-width: 0;
+  flex: 1;
+}
+.pick-row .t,
+.standout .t {
+  font-size: 14px;
+  font-weight: 560;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pick-row .a {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pick-score {
+  flex: none;
+  font-family: var(--font-num);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.standout i {
+  flex: none;
+  width: 8px;
+  align-self: stretch;
+  min-height: 42px;
+  border-radius: var(--r-full);
+}
+.standout .label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.mood-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 12px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.mood-legend span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.mood-legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
 }
 
 /* ── the mood mix, as one ribbon of cloth ─────────────────────── */
