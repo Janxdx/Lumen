@@ -82,7 +82,7 @@ echo "  wrote $DUMP ($(wc -c <"$DUMP" | tr -d ' ') bytes)"
 
 EXISTING="$(npx wrangler d1 execute "$NEW_DB" --remote --json --command \
   "select count(*) as n from sqlite_master where type = 'table' and name = 'users'" \
-  2>/dev/null | jq -r '.[0].results[0].n // 0')"
+  2>/dev/null | jq -r 'if type == "array" then .[0].results[0].n else .results[0].n end // 0')"
 
 if [ "${EXISTING:-0}" -gt 0 ]; then
   echo "  '$NEW_DB' already has tables — skipping the import."
@@ -110,7 +110,7 @@ npx wrangler d1 execute "$OLD_DB" --remote --json --command \
   "select file_path as k from books where file_path is not null and deleted = 0
    union
    select cover_path as k from books where cover_path is not null and deleted = 0" \
-  | jq -r '.[0].results[].k' >"$WORK/keys.txt"
+  | jq -r 'if type == "array" then .[0].results[] else .results[] end | .k' >"$WORK/keys.txt"
 
 TOTAL=$(wc -l <"$WORK/keys.txt" | tr -d ' ')
 echo "  $TOTAL objects to copy"

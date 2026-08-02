@@ -50,7 +50,7 @@
 			// renamed Worker against the old database, which is the one
 			// outcome worth failing loudly to avoid. Run
 			// `scripts/rename-to-soluna.sh`, then paste the id it prints.
-			"database_id": "PASTE_AFTER_RUNNING_scripts/rename-to-soluna.sh"
+			"database_id": "0ae603a8-68e7-433e-a998-45702054ca7c"
 		}
 	],
 	"r2_buckets": [
