@@ -49,14 +49,18 @@ npx wrangler login          # if you aren't already
 ./scripts/rename-to-soluna.sh
 ```
 
-It prints the new `database_id`; paste it into `wrangler.jsonc` where the
-placeholder sits, then `npm run deploy`.
+It writes the new `database_id` into `wrangler.jsonc` itself, as its second
+step rather than its last. That ordering is not cosmetic: every `wrangler
+d1` command resolves a database name against `wrangler.jsonc` first and only
+asks the API when the name is absent there, so with the placeholder still in
+place the import goes to an id that does not exist and dies with `Route not
+found`. Commit the changed line afterwards, then `npm run deploy`.
 
-Until that placeholder is replaced, deploys fail. That is deliberate — a
-valid old id there would let the renamed Worker ship silently against the
-old database, and the failure mode of *that* is the one you would only
-notice weeks later, having written reading history into a database you
-thought you had left behind.
+Until the script has run, deploys fail. That is deliberate — a valid old id
+in that field would let the renamed Worker ship silently against the old
+database, and the failure mode of *that* is the one you would only notice
+weeks later, having written reading history into a database you thought you
+had left behind.
 
 It deletes nothing. The old `lumen` database and `lumen-books` bucket stay
 exactly as they are, plus a timestamped `.sql` dump in the repo root. Keep
