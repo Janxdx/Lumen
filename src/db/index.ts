@@ -2,6 +2,7 @@ import Dexie, { type Table } from 'dexie';
 import type { BookMeta, SpineEntry, TocEntry } from '../engine/types';
 import type { Session } from '../engine/stats';
 import type { RatingRecord } from '../engine/rating';
+import type { PackedPassageIndex } from '../engine/passageStore';
 
 export interface BookRecord {
   id: string;
@@ -130,6 +131,23 @@ export interface DeviceSessionRecord {
   updatedAt: number;
 }
 
+/* ── the passage index ─────────────────────────────────────────────
+   Derived data: everything here can be rebuilt from the EPUB, which is why
+   it never syncs and why it is safe to evict. It is cached only because
+   building it costs about a second of CPU and a scan should feel instant
+   the second time you use it on the same book. */
+
+export interface PassageIndexRecord {
+  bookId: string;
+  /** `packIndex` output — typed arrays only, so IndexedDB stores it flat */
+  packed: PackedPassageIndex;
+  /** bytes, approximately — what the eviction policy sorts on */
+  size: number;
+  builtAt: number;
+  /** last scan that used it, for LRU eviction */
+  usedAt: number;
+}
+
 /** A record deleted locally, kept until the deletion has reached the server. */
 export interface TombstoneRecord {
   /** `${table}:${uid}` */
@@ -154,6 +172,7 @@ class LumenDB extends Dexie {
   deviceBooks!: Table<DeviceBookRecord, string>;
   deviceSessions!: Table<DeviceSessionRecord, number>;
   ratings!: Table<RatingRecord, string>;
+  passages!: Table<PassageIndexRecord, string>;
 
   constructor() {
     super('lumen');
@@ -238,6 +257,26 @@ class LumenDB extends Dexie {
       deviceSessions: '++id, deviceBookId, start, &uid, updatedAt',
       ratings: 'id, bookId, deviceBookId, ratedAt, overall, updatedAt',
     });
+
+    /* v5 adds the passage index cache. Nothing else changes shape. It is the
+       first table in this database that holds no user data at all — only a
+       restatement of the EPUB — so it is deliberately outside sync and
+       outside the tombstone machinery: dropping a row loses nothing but a
+       second of CPU. */
+    this.version(5).stores({
+      books: 'id, addedAt, finishedAt, updatedAt',
+      files: 'bookId',
+      covers: 'bookId',
+      progress: 'bookId, updatedAt',
+      sessions: '++id, bookId, start, &uid',
+      bookmarks: '++id, bookId, createdAt, &uid, updatedAt',
+      settings: 'key',
+      tombstones: 'key, at',
+      deviceBooks: 'id, addedAt, updatedAt, bookId',
+      deviceSessions: '++id, deviceBookId, start, &uid, updatedAt',
+      ratings: 'id, bookId, deviceBookId, ratedAt, overall, updatedAt',
+      passages: 'bookId, usedAt',
+    });
   }
 }
 
@@ -262,7 +301,16 @@ export async function estimateUsage(): Promise<{ used: number; quota: number }> 
 export async function deleteBook(bookId: string): Promise<void> {
   await db.transaction(
     'rw',
-    [db.books, db.files, db.covers, db.progress, db.bookmarks, db.ratings, db.tombstones],
+    [
+      db.books,
+      db.files,
+      db.covers,
+      db.progress,
+      db.bookmarks,
+      db.ratings,
+      db.tombstones,
+      db.passages,
+    ],
     async () => {
       /* The rating stays. It carries its own title and author precisely so
          that removing a 4 MB EPUB to free space does not also remove what
@@ -283,6 +331,7 @@ export async function deleteBook(bookId: string): Promise<void> {
       await db.files.delete(bookId);
       await db.covers.delete(bookId);
       await db.progress.delete(bookId);
+      await db.passages.delete(bookId);
       await db.bookmarks.where('bookId').equals(bookId).delete();
 
       // remember the deletion so the next sync removes it server-side too,
@@ -364,8 +413,30 @@ export async function deleteRating(id: string): Promise<void> {
 
 /** Free the local EPUB but keep the book in the library (it lives in the cloud). */
 export async function evictFile(bookId: string): Promise<void> {
-  await db.transaction('rw', [db.files, db.books], async () => {
+  await db.transaction('rw', [db.files, db.books, db.passages], async () => {
     await db.files.delete(bookId);
     await db.books.update(bookId, { fileMissing: true });
+    // the index is a restatement of a file that is no longer here
+    await db.passages.delete(bookId);
   });
+}
+
+/** Total bytes held by cached passage indexes, above which the least
+    recently used are dropped. Three or four novels' worth — enough that
+    the books you actually scan stay warm, small enough that the cache
+    never becomes the reason you run out of space. */
+export const PASSAGE_CACHE_BUDGET = 24 * 1024 * 1024;
+
+/** Drop least-recently-used indexes until the cache fits its budget.
+    Called after a build, never on a read path. */
+export async function trimPassageCache(
+  budget = PASSAGE_CACHE_BUDGET
+): Promise<void> {
+  const rows = await db.passages.orderBy('usedAt').toArray(); // oldest first
+  let total = rows.reduce((a, r) => a + r.size, 0);
+  for (const row of rows) {
+    if (total <= budget) break;
+    await db.passages.delete(row.bookId);
+    total -= row.size;
+  }
 }

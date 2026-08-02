@@ -27,6 +27,7 @@ import {
 } from './auth';
 import { pull, push, type Changes } from './data';
 import { SESSION_TTL, type Env } from './env';
+import { gate } from './limit';
 import {
   HttpError,
   bad,
@@ -53,6 +54,11 @@ export default {
          top-level navigation from an email client — which reports
          `cross-site` and would be refused. */
       if (req.method !== 'GET') requireSameOrigin(req);
+
+      /* Ahead of the router, and so ahead of every session lookup: reading
+         a session is itself a query, and a request that is over its ceiling
+         should not get to spend one. See worker/limit.ts. */
+      await gate(env, req, path);
 
       return await route(req, env, url, path);
     } catch (e) {
