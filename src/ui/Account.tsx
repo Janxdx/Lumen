@@ -38,10 +38,11 @@ export function Account() {
 
 /* ── signed out ──────────────────────────────────────────────────── */
 
-/* One screen, two shapes. Which one appears is decided by what the backend
-   can actually do rather than by a build-time flag: the Worker offers a
-   link and a passkey, Supabase offers a password. Rendering from
-   capabilities means neither ever shows a control that would error. */
+/* One screen, shaped by what the backend can actually do rather than by a
+   build-time flag: the Worker offers a magic link and a passkey, never a
+   password. Rendering from capabilities means it never shows a control
+   that would error — and leaves room for a future backend that does
+   support passwords without this screen changing. */
 
 function SignIn() {
   const {
@@ -492,10 +493,10 @@ function NotConfigured() {
         </div>
         <h1 className="display">Sync is switched off</h1>
         <p className="auth-lede">
-          Lumen is running without a backend, so everything stays on this device.
-          Add <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> to
-          your environment, run <code>supabase/schema.sql</code> once, and accounts
-          appear here.
+          Soluna is running without a backend, so everything stays on this device.
+          Remove <code>VITE_BACKEND=none</code> from your environment to use
+          Soluna's own Worker — same origin, nothing else to configure — and
+          accounts appear here.
         </p>
       </div>
     </div>

@@ -55,7 +55,7 @@ import {
 } from './mapping';
 
 const META_KEY = 'sync';
-const SETTINGS_AT = 'lumen.settings.at';
+const SETTINGS_AT = 'soluna.settings.at';
 
 interface SyncMeta {
   /** how far this device has read the server's change log */
@@ -139,11 +139,10 @@ export const useSync = create<SyncState>((set, get) => ({
         set({ status: 'idle', step: null });
         return;
       }
-      /* An unproven address syncs nothing. On the Worker this cannot happen
-         — an account only exists once a link has been opened — but Supabase
-         will hand out a session first, and its policies then refuse every
-         table. Failing here means one honest sentence instead of seven
-         permission errors and a half-finished push to reconcile. */
+      /* An unproven address syncs nothing. On the Worker this cannot
+         actually happen — an account only exists once a link has been
+         opened — but the check stays cheap insurance: failing here means
+         one honest sentence instead of a half-finished push to reconcile. */
       if (!user.verified) {
         set({ status: 'unverified', step: null, error: null });
         return;
@@ -664,7 +663,7 @@ export function initSync(): void {
   /* Local writes are chatty — progress is saved on every page turn — so
      they get debounced rather than firing a round trip each time. */
   let timer: ReturnType<typeof setTimeout> | undefined;
-  addEventListener('lumen:changed', () => {
+  addEventListener('soluna:changed', () => {
     clearTimeout(timer);
     timer = setTimeout(trigger, 8000);
   });

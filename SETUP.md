@@ -1,4 +1,4 @@
-# Getting Lumen running — step by step
+# Getting Soluna running — step by step
 
 Two parts. **Part A** gets it working on your own Mac in about five minutes,
 costs nothing, and needs no accounts. **Part B** puts it on the internet.
@@ -28,7 +28,7 @@ have one, this is where you make it.
 ### A2. Create the database
 
 ```sh
-npx wrangler d1 create lumen
+npx wrangler d1 create soluna
 ```
 
 It prints a block that looks like this:
@@ -36,7 +36,7 @@ It prints a block that looks like this:
 ```
 [[d1_databases]]
 binding = "DB"
-database_name = "lumen"
+database_name = "soluna"
 database_id = "a1b2c3d4-5678-90ab-cdef-1234567890ab"
 ```
 
@@ -47,7 +47,7 @@ says `"database_id": "REPLACE_WITH_YOUR_D1_ID"`, and paste it in place of
 ### A3. Create the file storage
 
 ```sh
-npx wrangler r2 bucket create lumen-books
+npx wrangler r2 bucket create soluna-books
 ```
 
 > If this one fails saying R2 isn't enabled, go to the Cloudflare dashboard →
@@ -132,33 +132,31 @@ Paste the key when it asks. It is not stored in any file.
 Open `wrangler.jsonc` and change these two lines:
 
 ```jsonc
-"APP_ORIGIN": "https://lumen.yourdomain.com",
-"MAIL_FROM": "Lumen <lumen@yourdomain.com>"
+"APP_ORIGIN": "https://readsoluna.com",
+"MAIL_FROM": "Soluna <hello@readsoluna.com>"
 ```
 
 `APP_ORIGIN` must be **exactly** the address you will type into the browser —
 including `https://`, and no trailing slash. Passkeys are bound to this
 hostname. If sign-in works but passkeys mysteriously don't, this is why.
 
-### B4. Create the real database tables
-
-The database in Part A was a local copy on your Mac. The deployed one is
-empty:
-
-```sh
-npm run db:remote
-```
-
-### B5. Deploy
+### B4. Deploy
 
 ```sh
 npm run deploy
 ```
 
-### B6. Attach the domain
+The database in Part A was a local copy on your Mac; the deployed one starts
+empty. You don't need a separate step to fill it — `npm run deploy` applies
+`worker/schema.sql` to the remote database first (it's the `predeploy` script
+in `package.json`, and it's idempotent, so this happens on every deploy
+without doing any harm). A future release that adds a table shows up in prod
+the moment you deploy it, no extra command to remember.
 
-Cloudflare dashboard → Workers & Pages → **lumen** → Settings → Domains &
-Routes → **Add** → Custom Domain → enter `lumen.yourdomain.com`.
+### B5. Attach the domain
+
+Cloudflare dashboard → Workers & Pages → **soluna** → Settings → Domains &
+Routes → **Add** → Custom Domain → enter `readsoluna.com`.
 
 Give it a minute, then open it. Sign in with your real email — this time the
 link actually arrives in your inbox.
@@ -177,16 +175,3 @@ Add a passkey on your iPad, and from then on it's Face ID.
 | "That link has already been used" | Links work once. Ask for a new one. |
 | Signed in, then instantly signed out | You're on `http://` with a domain other than localhost. Cookies need https. |
 | Books sync but covers don't | R2 wasn't created — see step A3. |
-
-## Going back to Supabase
-
-Nothing was deleted. Create `.env.local` with:
-
-```sh
-VITE_BACKEND=supabase
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
-```
-
-The two backends hold separate data — switching points the same local
-library at a different server, it does not copy anything across.

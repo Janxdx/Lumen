@@ -1,4 +1,4 @@
-# Lumen's own backend
+# Soluna's own backend
 
 Auth, database and file storage on your Cloudflare account. No Supabase, no
 monthly bill, no vendor holding your library.
@@ -38,13 +38,68 @@ harder to phish than anything a person would have typed.
 A pleasant side effect: the "signed in but never confirmed the email" state
 cannot exist here. An account only comes into being when a link is opened.
 
+## Rate limiting
+
+Every request under `/api` and `/auth` passes `gate()` in `limit.ts` before
+the router — and so before the session lookup, which is itself a query. A
+caller who is over their ceiling is turned away having cost one edge-local
+counter and no database read at all. That ordering is the whole design:
+a limiter placed after authentication makes every rejected request pay for
+the query it was rejected for.
+
+The counters are Cloudflare rate limiting bindings, declared in
+`wrangler.jsonc`. They live on the machine the Worker already runs on, so
+`limit()` is not a network round trip and costs nothing. They are also
+per-location and can only hold a 10- or 60-second window, which is fine for
+a ceiling whose job is to make hammering pointless rather than to account
+for anything precisely.
+
+| Binding | Ceiling | Keyed by | Covers |
+| --- | --- | --- | --- |
+| `RL_BURST` | 60 / 10s | session | everything except files |
+| `RL_ADDRESS` | 300 / 10s | address | everything, always |
+| `RL_READ` | 120 / 60s | session | `/api/pull`, `/auth/me`, `/auth/passkeys` |
+| `RL_WRITE` | 30 / 60s | session | `/api/push` |
+| `RL_AUTH` | 12 / 60s | address | passkeys, magic link, callback |
+| `RL_FILES_READ` | 600 / 60s | session | `GET /api/files/…` |
+| `RL_FILES_WRITE` | 120 / 60s | session | `PUT`/`DELETE /api/files/…` |
+
+Three things in that table are less arbitrary than they look.
+
+**Why two walls.** Counting per session is the better key — an address can
+be a household, an office or a whole mobile carrier, and rationing one
+rations all of them. But the session key comes from the request, so a script
+that invents a fresh cookie each time collects a fresh budget each time.
+`RL_ADDRESS` is what makes the per-session division binding; it is set high
+enough that only a machine reaches it.
+
+**Why files skip the burst wall.** The client walks whole libraries in
+sequential loops with nothing pacing them — `downloadAll()`, and the upload
+and cover passes in `syncFiles()`. The honest length of a legitimate burst
+there is however many books somebody owns, so ten seconds is the wrong
+window to judge it in. A false 429 mid-import does not look like a rate
+limit to the reader; it looks like sync is broken.
+
+**Why one limit stays in D1.** The magic-link ceiling in `auth.ts` still
+counts in the `rate_limits` table, because it needs a fifteen-minute window
+and one count across every Cloudflare location. What it rations is not load
+arriving here but mail arriving in someone else's inbox, and five messages
+is five messages wherever the requests were served from. `RL_AUTH` sits in
+front of it and absorbs the flood; the D1 counter meters what survives.
+
+If a binding is missing — a deployment from a `wrangler.jsonc` that predates
+them — `gate()` warns and lets the request through. This is abuse defence,
+not authentication: nothing behind it is unguarded, every endpoint still
+requires a session, and refusing to serve books over a missing counter would
+be the worse failure.
+
 ## Setup
 
 ### 1. Create the resources
 
 ```sh
-npx wrangler d1 create lumen          # copy the printed database_id
-npx wrangler r2 bucket create lumen-books
+npx wrangler d1 create soluna          # copy the printed database_id
+npx wrangler r2 bucket create soluna-books
 ```
 
 Put the `database_id` into `wrangler.jsonc` where it says
@@ -54,8 +109,14 @@ Put the `database_id` into `wrangler.jsonc` where it says
 
 ```sh
 npm run db:local     # for wrangler dev
-npm run db:remote    # for the deployed Worker
 ```
+
+The remote database doesn't need this step by hand: `npm run deploy` applies
+`worker/schema.sql` to it automatically first (the `predeploy` script), and
+`worker/schema.sql` is idempotent, so every future deploy re-applies safely
+and a new table never goes missing in prod. Run `npm run db:remote` yourself
+only if you want the tables created before the first deploy, or want to push
+a schema change without deploying.
 
 ### 3. Point it at your domain
 
@@ -104,24 +165,16 @@ Once the domain resolves, add a Custom Domain route to the Worker, then set
 registered against the old hostname and will need to be added again; magic
 links keep working throughout.
 
-## Switching between backends
+## Turning sync off
 
-Both adapters are still in the tree, behind `src/sync/backend.ts`:
+The Worker is the only backend now — the Supabase adapter was removed once
+the migration was verified. `src/sync/backend.ts` is still the seam, so a
+future adapter is a new file behind it rather than a rewrite.
 
 ```sh
-VITE_BACKEND=lumen      # the Worker
-VITE_BACKEND=supabase   # the old hosted backend
-VITE_BACKEND=none       # local only, no account screen, no network
+VITE_BACKEND=soluna   # the Worker (default; also what unset means)
+VITE_BACKEND=none    # local only, no account screen, no network
 ```
-
-Unset means: Supabase if its env vars are present, otherwise the Worker.
-Nothing above the adapter layer knows which is running, so this is a genuine
-switch and not a one-way door — worth keeping until you have read a book
-end to end through the new one.
-
-Note that the two backends hold **separate** data. Switching does not
-migrate anything; it points the same local library at a different server,
-and the first sync uploads what this device has.
 
 ## Verifying it works
 

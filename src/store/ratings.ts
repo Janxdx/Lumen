@@ -33,7 +33,7 @@ import { useDevice } from './device';
    going through the DOM rather than an import keeps this file unaware that
    a server exists at all. */
 const changed = (): void => {
-  dispatchEvent(new CustomEvent('lumen:changed'));
+  dispatchEvent(new CustomEvent('soluna:changed'));
 };
 
 /** What a screen hands in. Everything but the subject is optional. */

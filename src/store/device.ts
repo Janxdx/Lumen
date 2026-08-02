@@ -32,7 +32,7 @@ import type { Session } from '../engine/stats';
 import { useLibrary } from './library';
 
 const changed = (): void => {
-  dispatchEvent(new CustomEvent('lumen:changed'));
+  dispatchEvent(new CustomEvent('soluna:changed'));
 };
 
 const TIMER_KEY = 'device.timer';

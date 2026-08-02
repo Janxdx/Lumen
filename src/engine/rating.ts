@@ -13,7 +13,7 @@
  * opinion of it. The link to a book is a convenience, not the identity.
  *
  * And colour means something here, which it does nowhere else in the app.
- * The rest of Lumen spends a single warm accent and hoards the rest; the
+ * The rest of Soluna spends a single warm accent and hoards the rest; the
  * shelf spends a palette, because on this one screen the colour *is* the
  * data. Restraint everywhere else is what buys it.
  *

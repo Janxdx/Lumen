@@ -16,7 +16,7 @@ import type { Session } from '../engine/stats';
    unaware that a server exists at all — it still works with sync switched
    off, and there is no import cycle between the two. */
 const changed = (): void => {
-  dispatchEvent(new CustomEvent('lumen:changed'));
+  dispatchEvent(new CustomEvent('soluna:changed'));
 };
 
 interface LibraryState {

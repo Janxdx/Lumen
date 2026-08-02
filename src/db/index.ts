@@ -160,7 +160,7 @@ export interface TombstoneRecord {
 export const newUid = (): string =>
   crypto.randomUUID?.() ?? `u${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
 
-class LumenDB extends Dexie {
+class SolunaDB extends Dexie {
   books!: Table<BookRecord, string>;
   files!: Table<FileRecord, string>;
   covers!: Table<CoverRecord, string>;
@@ -175,7 +175,7 @@ class LumenDB extends Dexie {
   passages!: Table<PassageIndexRecord, string>;
 
   constructor() {
-    super('lumen');
+    super('soluna');
     this.version(1).stores({
       books: 'id, addedAt, finishedAt',
       files: 'bookId',
@@ -280,7 +280,7 @@ class LumenDB extends Dexie {
   }
 }
 
-export const db = new LumenDB();
+export const db = new SolunaDB();
 
 /** Ask Safari not to evict the library. Only granted for installed PWAs. */
 export async function requestPersistence(): Promise<boolean> {

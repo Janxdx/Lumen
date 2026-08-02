@@ -1,38 +1,28 @@
 /* Which backend is live, and the one place that decides.
 
-   Three states, and the app is fully usable in all of them:
+   Two states, and the app is fully usable in both:
 
-     lumen     — Lumen's own Worker on Cloudflare. Same origin as the app,
-                 so there is nothing to configure: no project URL, no
-                 publishable key, no SDK.
-     supabase  — the hosted backend, when its env vars are present.
-     none      — no server at all. The reader is local-first, so this is a
-                 supported way to run it rather than a broken one: no
-                 account screen, no network, everything else works.
+     soluna  — Soluna's own Worker on Cloudflare (D1 + R2). Same origin as the
+              app, so there is nothing to configure: no project URL, no key,
+              no SDK.
+     none   — no server at all. The reader is local-first, so this is a
+              supported way to run it rather than a broken one: no account
+              screen, no network, everything else works.
 
-   Selection is by preference, not by guesswork. `VITE_BACKEND` settles it
-   outright when set; otherwise Supabase wins if it is configured, because a
-   half-migrated install should keep syncing to the place that already holds
-   the books. */
+   `VITE_BACKEND=none` is the only thing that turns sync off; anything else
+   (including unset) means the Worker. */
 
 import type { Backend } from './backend';
-import { supabaseBackend, supabaseConfigured } from './adapters/supabase';
-import { lumenBackend } from './adapters/lumen';
+import { solunaBackend } from './adapters/soluna';
 
-type Choice = 'lumen' | 'supabase' | 'none';
+type Choice = 'soluna' | 'none';
 
 const preference = ((import.meta.env ?? ({} as ImportMetaEnv)).VITE_BACKEND?.trim() ??
   '') as Choice | '';
 
-const chosen: Choice =
-  preference === 'lumen' || preference === 'supabase' || preference === 'none'
-    ? preference
-    : supabaseConfigured
-      ? 'supabase'
-      : 'lumen';
+const chosen: Choice = preference === 'none' ? 'none' : 'soluna';
 
-export const backend: Backend | null =
-  chosen === 'supabase' ? supabaseBackend : chosen === 'lumen' ? lumenBackend : null;
+export const backend: Backend | null = chosen === 'soluna' ? solunaBackend : null;
 
 export const syncEnabled = backend !== null;
 
@@ -58,13 +48,6 @@ export function humanError(e: unknown): string {
   if (name === 'InvalidStateError')
     return 'This device already has a passkey for that account.';
 
-  if (/invalid login credentials/i.test(msg)) return 'Wrong email or password.';
-  if (/email not confirmed/i.test(msg))
-    return 'Check your inbox and confirm your email first.';
-  if (/user already registered/i.test(msg))
-    return 'That email already has an account — sign in instead.';
-  if (/password should be at least/i.test(msg))
-    return 'Password must be at least 6 characters.';
   if (/rate limit|too many|429/i.test(msg))
     return 'Too many attempts. Wait a minute and try again.';
   if (/failed to fetch|networkerror|load failed/i.test(msg))

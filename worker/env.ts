@@ -1,4 +1,4 @@
-/* Bindings and configuration for the Lumen Worker.
+/* Bindings and configuration for the Soluna Worker.
 
    Everything here comes from wrangler.jsonc (bindings and vars) or from
    `wrangler secret put` (secrets). Nothing is read from a file at runtime —
@@ -28,12 +28,14 @@ export interface Env {
   RL_WRITE?: RateLimit;
   /** the signed-out surface: passkeys, magic links */
   RL_AUTH?: RateLimit;
-  /** EPUB and cover traffic against R2 */
-  RL_FILES?: RateLimit;
+  /** EPUB and cover downloads from R2 — sized for syncing a whole library */
+  RL_FILES_READ?: RateLimit;
+  /** EPUB and cover uploads and deletes, the direction that costs storage */
+  RL_FILES_WRITE?: RateLimit;
 
   /* ── vars ──────────────────────────────────────────────────────── */
 
-  /** e.g. "https://lumen.example.com" — the canonical origin of the app */
+  /** e.g. "https://readsoluna.com" — the canonical origin of the app */
   APP_ORIGIN: string;
   /** the address magic links are sent from, on a domain verified with Resend */
   MAIL_FROM: string;
@@ -48,8 +50,8 @@ export interface Env {
 
    The relying party is the site a passkey belongs to, and the browser will
    refuse an assertion whose RP id doesn't match the page's domain. It has
-   to be the registrable domain — "lumen.example.com" or "example.com", not
-   a URL and not a path.
+   to be the registrable domain — "readsoluna.com", not a URL and not a
+   path.
 
    Deriving it from APP_ORIGIN rather than configuring it separately removes
    the failure where the two drift apart and every sign-in fails with a
@@ -57,7 +59,7 @@ export interface Env {
 
 export const rpID = (env: Env): string => new URL(env.APP_ORIGIN).hostname;
 
-export const rpName = 'Lumen';
+export const rpName = 'Soluna';
 
 /* ── lifetimes ─────────────────────────────────────────────────────
 

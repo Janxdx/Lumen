@@ -132,7 +132,7 @@ export function tasteCardSvg({ profile, ratings, palette, dark, period }: CardIn
 
   /* ── masthead ── */
   parts.push(
-    text(M, Y.masthead, 'LUMEN', {
+    text(M, Y.masthead, 'SOLUNA', {
       family: SANS,
       size: 26,
       weight: 700,

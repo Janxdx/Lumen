@@ -1,4 +1,4 @@
-# Lumen
+# Soluna
 
 An EPUB reader for iPad, iPhone and Mac. Web-first, installable, offline.
 See [DESIGN.md](./DESIGN.md) for the design language and architecture.
@@ -37,10 +37,13 @@ fix is a static host — the build is just files.
 | Deploy command | `npx wrangler deploy` |
 | Node version | 20 or newer (`NODE_VERSION` env var) |
 
-`wrangler.jsonc` is what makes that deploy command work: it declares an
-assets-only Worker — no server code — pointing at `dist`, with
-`not_found_handling: single-page-application` so every route serves the shell.
-Locally the same thing runs as `npm run deploy`.
+`wrangler.jsonc` is what makes that deploy command work: it declares the
+Worker (API under `/api` and `/auth`, static assets everywhere else) pointing
+at `dist`, with `not_found_handling: single-page-application` so every other
+route serves the shell. Locally the same thing runs as `npm run deploy`,
+which also applies `worker/schema.sql` to the remote D1 database first (see
+[Accounts and sync](#accounts-and-sync)) — a fresh deploy can never leave a
+table missing in prod.
 
 `public/_headers` keeps `index.html` and `sw.js` uncacheable so a new deploy is
 actually picked up on a device that already has the app installed, and pins the
@@ -52,57 +55,50 @@ only ever serves the app itself.
 
 ## Accounts and sync
 
-Optional, and off until you configure it. With no credentials set there is no
-network traffic at all and the Account tab says so; the reader is unchanged.
-
-**Set it up once:**
-
-1. Create a project at [supabase.com](https://supabase.com) (free tier is plenty).
-2. SQL Editor → paste [`supabase/schema.sql`](./supabase/schema.sql) → Run. That
-   creates the tables, the row-level-security policies, and the private `books`
-   storage bucket.
-3. Authentication → Providers → Email: on. Turn *Confirm email* off while
-   testing, on before anyone else uses it.
-4. `cp .env.example .env.local` and fill in the project URL and the **anon** key
-   (Project Settings → API). Never the `service_role` key — it bypasses RLS.
-5. In Cloudflare, add the same two variables under Settings → Variables, then
-   redeploy. Vite inlines them at build time, so a redeploy is required.
+Backed by Soluna's own Worker — Cloudflare D1 for rows, R2 for files. Same
+origin as the app, so there is nothing to configure and no key in
+JavaScript; the session lives in an HttpOnly cookie. Optional in the sense
+that `VITE_BACKEND=none` turns it off entirely, but on by default: no setup
+step is needed to get an account screen.
 
 **What syncs:** the book list, the EPUB files themselves, reading position,
 every session behind the statistics, bookmarks, ratings, and your reader
 settings. Signing in on a device that already has books uploads them to the
 account.
 
-**Upgrading an existing database:** both schema files are idempotent, so when
-a release adds a table you re-run the same file — `supabase/schema.sql` in the
-SQL editor, or `npm run db:remote` for the Worker. Nothing else is needed; the
-local database migrates itself when the app next opens.
+**Schema deploys itself.** `worker/schema.sql` is idempotent
+(`create table if not exists`) and runs automatically before every
+`npm run deploy` — `predeploy` in `package.json` calls `npm run db:remote`
+(`wrangler d1 execute soluna --remote --file worker/schema.sql`) ahead of
+`wrangler deploy`. A release that adds a table, like `ratings`, no longer
+depends on remembering to apply it by hand; it is live in prod the moment
+the deploy finishes. Run `npm run db:local` once yourself for local
+development against `wrangler dev` — nothing else is needed, and the local
+IndexedDB migrates itself when the app next opens.
 
-**How conflicts resolve:** last write wins, per record. The cursor is the
-server's clock (`synced_at`), never the device's, so two iPads with clocks a
-minute apart can't take turns overwriting each other. Deletions leave a
-tombstone locally so a deleted book doesn't reappear on the next pull.
+**How conflicts resolve:** last write wins, per record. The cursor is a
+counter the Worker hands back on push (`row_seq`), never the device's clock,
+so two iPads with clocks a minute apart can't take turns overwriting each
+other. Deletions leave a tombstone locally so a deleted book doesn't
+reappear on the next pull.
 
-**Files:** EPUBs go to `books/<user id>/<book id>.epub` in Supabase Storage,
-private, readable only by that user. A book pulled from another device arrives
-as metadata first and downloads its file the moment you open it — a fresh iPad
-is usable in seconds rather than after the whole library transfers. *Account →
-Download all* fetches everything up front for a flight.
+**Files:** EPUBs go to `books/<user id>/<book id>.epub` in the `BOOKS` R2
+bucket, reachable only through the Worker's own session check — nothing is
+public. A book pulled from another device arrives as metadata first and
+downloads its file the moment you open it — a fresh iPad is usable in
+seconds rather than after the whole library transfers. *Account → Download
+all* fetches everything up front for a flight.
 
-### Moving to your own server
+### Self-hosting
 
-The Supabase pieces are deliberately shallow, so this stays a small job:
-
-- `supabase/schema.sql` is plain PostgreSQL apart from `auth.uid()`. Point it at
-  your own Postgres and swap that call for `current_setting('app.user_id')::uuid`,
-  set per connection from your own JWT. Table shapes don't change.
-- `src/sync/client.ts` is the only file that constructs a Supabase client.
-  Self-hosting Supabase means changing the URL in `.env` and nothing else.
-- `src/sync/sync.ts` and `src/sync/mapping.ts` are the only files that name
-  tables or storage paths. Replacing the backend entirely means rewriting those
-  three files; nothing in `ui/`, `store/` or `engine/` knows a server exists.
-- Object storage is S3-compatible either way, so `books/<user>/<book>.epub`
-  carries over to MinIO or R2 unchanged.
+The whole backend is one Cloudflare account: `wrangler deploy` ships the
+Worker, D1 database and R2 bucket together, and `worker/README.md` covers
+provisioning them from scratch. `src/sync/adapters/soluna.ts` is the only
+file that talks to it; `src/sync/sync.ts` and `src/sync/mapping.ts` are the
+only files that name tables or storage paths. Replacing the backend
+entirely — a different provider, a different database — means rewriting
+those three files; nothing in `ui/`, `store/` or `engine/` knows a server
+exists.
 
 ## Using it
 
@@ -183,7 +179,8 @@ src/db/         IndexedDB (Dexie): books, files, covers, progress, sessions,
                 device books and their logged sessions, ratings
 src/store/      settings, library and account state
 src/sync/       the only code that knows a backend exists
-  client.ts     Supabase client + config; absent config disables sync
+  client.ts     picks the backend (the Worker, or none); VITE_BACKEND=none disables sync
+  adapters/     soluna.ts — the Worker adapter (D1 + R2)
   mapping.ts    local record ⇄ wire row
   sync.ts       pull → merge → push, plus file upload/download
 src/ui/         Library, Reader, Pacer controls, Device shelf, Shelf (ratings),
@@ -193,7 +190,7 @@ tests/          run with `npm test` — the page↔word maths, the rating and
                 no build step and no test framework: Node strips the types
                 itself and `register.mjs` teaches it the extensionless
                 imports a bundler would resolve
-supabase/       schema.sql — tables, RLS policies, storage bucket
+worker/         the Soluna Worker — API, auth, rate limiting, D1 schema
 ```
 
 `engine/` is deliberately free of React so it can move into a native shell

@@ -5,7 +5,7 @@
 	//
 	// Same origin for both is deliberate — it is what lets the session live
 	// in an HttpOnly cookie instead of a token in JavaScript.
-	"name": "lumen",
+	"name": "soluna",
 	"main": "worker/index.ts",
 	"compatibility_date": "2026-07-27",
 	"compatibility_flags": [
@@ -36,21 +36,27 @@
 		// to be the address people actually use — change it when you attach a
 		// custom domain, or every assertion will be refused by the browser.
 		"APP_ORIGIN": "http://localhost:8787",
-		"MAIL_FROM": "Lumen <lumen@example.com>"
+		"MAIL_FROM": "Soluna <hello@readsoluna.com>"
 	},
 	"d1_databases": [
 		{
 			// `binding` is the name the code uses: env.DB in worker/data.ts.
 			// It is not the database's name and does not have to match it.
 			"binding": "DB",
-			"database_name": "lumen",
-			"database_id": "a255e5ef-3836-4c3f-aa97-dd0bb06f6929"
+			"database_name": "soluna",
+			// Deliberately unset until the rename migration has run. The old
+			// database is still called `lumen` and still holds every row; a
+			// valid id here would let `npm run deploy` quietly ship the
+			// renamed Worker against the old database, which is the one
+			// outcome worth failing loudly to avoid. Run
+			// `scripts/rename-to-soluna.sh`, then paste the id it prints.
+			"database_id": "0ae603a8-68e7-433e-a998-45702054ca7c"
 		}
 	],
 	"r2_buckets": [
 		{
 			"binding": "BOOKS",
-			"bucket_name": "lumen-books"
+			"bucket_name": "soluna-books"
 		}
 	],
 	// ── rate limiting ────────────────────────────────────────────────
@@ -136,18 +142,39 @@
 				"period": 60
 			}
 		},
+		// ── files, which are the awkward case ────────────────────────
+		//
+		// R2 rather than D1, but the same kind of damage. What makes them
+		// awkward is that the client walks whole libraries in sequential
+		// loops with nothing pacing them: downloadAll() fetches every book,
+		// and syncFiles() uploads every unsynced one and then fetches every
+		// missing cover. Those are legitimate and they are bursts, and their
+		// length is however many books somebody owns. So the file paths skip
+		// the general burst ceiling — 60 in 10 seconds is nothing for a
+		// multi-megabyte EPUB but easy for a run of small covers — and are
+		// held by these instead, with RL_ADDRESS still above them.
 		{
-			// Files, in R2 rather than D1, but the same kind of damage: a
-			// PUT loop full of EPUBs costs storage and class-A operations.
-			// The headroom is large because the first sync of an existing
-			// library is a legitimate burst — syncFiles() walks every book
-			// back to back, two objects each, with nothing pacing it. At 240
-			// a minute that is a hundred and twenty books, which is a bigger
-			// shelf than this limit will ever meet.
-			"name": "RL_FILES",
+			// Downloads. Generous, because a first sync on a new iPad is one
+			// long sequential read of an entire shelf, and because a caller
+			// abusing this is authenticated and spending their own bandwidth
+			// on files they already have every right to fetch.
+			"name": "RL_FILES_READ",
 			"namespace_id": "1006",
 			"simple": {
-				"limit": 240,
+				"limit": 600,
+				"period": 60
+			}
+		},
+		{
+			// Uploads and deletes. Tighter, because this is the direction
+			// that costs storage and class-A operations, and because it is
+			// paced by the network in a way reads are not — 120 a minute is
+			// sixty books, and a book is megabytes. Well above any real
+			// import, well below anything worth doing on purpose.
+			"name": "RL_FILES_WRITE",
+			"namespace_id": "1007",
+			"simple": {
+				"limit": 120,
 				"period": 60
 			}
 		}

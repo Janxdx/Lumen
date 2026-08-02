@@ -107,8 +107,9 @@ export async function pull(env: Env, user: User, cursor: number): Promise<PullRe
 }
 
 /* SQLite has no JSON type, so these columns travel as text. Parsing here
-   rather than on the client keeps the wire format identical to the Supabase
-   one, which is what lets a single set of mapping functions serve both. */
+   rather than on the client keeps the wire format consistent no matter
+   which table it came from, so one set of mapping functions can serve
+   all of them. */
 function decodeBook(row: Row): Row {
   return {
     ...row,

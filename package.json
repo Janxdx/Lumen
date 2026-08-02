@@ -1,5 +1,5 @@
 {
-  "name": "lumen-reader",
+  "name": "soluna-reader",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -10,14 +10,14 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p worker/tsconfig.json",
     "deploy": "npm run build && npx wrangler deploy",
     "worker": "npm run build && wrangler dev",
-    "db:local": "wrangler d1 execute lumen --local --file worker/schema.sql",
-    "db:remote": "wrangler d1 execute lumen --remote --file worker/schema.sql",
+    "db:local": "wrangler d1 execute soluna --local --file worker/schema.sql",
+    "db:remote": "wrangler d1 execute soluna --remote --file worker/schema.sql",
+    "predeploy": "npm run db:remote",
     "test": "node --import ./tests/register.mjs tests/device-math.test.mts && node --import ./tests/register.mjs tests/device-store.test.mts && node --import ./tests/register.mjs tests/sync-merge.test.mts && node --import ./tests/register.mjs tests/passage-match.test.mts && node --import ./tests/register.mjs tests/rating.test.mts && node --import ./tests/register.mjs tests/rating-store.test.mts && node --import ./tests/register.mjs tests/passage-store.test.mts"
   },
   "dependencies": {
     "@simplewebauthn/browser": "^13.3.0",
     "@simplewebauthn/server": "^13.3.2",
-    "@supabase/supabase-js": "^2.110.9",
     "dexie": "^4.0.8",
     "fflate": "^0.8.2",
     "react": "^18.3.1",

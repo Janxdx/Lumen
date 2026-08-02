@@ -47,7 +47,7 @@ export function TasteCard({ ratings }: { ratings: RatingRecord[] }) {
     setError(null);
     try {
       const png = await svgToPng(svg, CARD_W, CARD_H, 2);
-      await saveFile(png, `lumen-taste-${period === 'year' ? 'year' : 'all-time'}.png`);
+      await saveFile(png, `soluna-taste-${period === 'year' ? 'year' : 'all-time'}.png`);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'The card could not be saved.');
     } finally {

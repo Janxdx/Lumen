@@ -11,7 +11,7 @@
 const BUILD = '__BUILD__'; // replaced at build time
 const ASSETS = ['__ASSETS__']; // replaced at build time
 
-const CACHE = `lumen-${BUILD}`;
+const CACHE = `soluna-${BUILD}`;
 const NAV_TIMEOUT_MS = 2500;
 
 const SHELL = [
