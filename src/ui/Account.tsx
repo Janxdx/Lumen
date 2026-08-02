@@ -23,17 +23,17 @@ const relative = (t: number | null): string => {
   return new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 };
 
-export function Account() {
+export function Account({ onImpressum }: { onImpressum: () => void }) {
   const { ready, user, init } = useAuth();
 
   useEffect(() => {
     init();
   }, [init]);
 
-  if (!syncEnabled) return <NotConfigured />;
+  if (!syncEnabled) return <NotConfigured onImpressum={onImpressum} />;
   if (!ready) return <div className="scroller" />;
 
-  return user ? <SignedIn /> : <SignIn />;
+  return user ? <SignedIn onImpressum={onImpressum} /> : <SignIn onImpressum={onImpressum} />;
 }
 
 /* ── signed out ──────────────────────────────────────────────────── */
@@ -44,7 +44,7 @@ export function Account() {
    that would error — and leaves room for a future backend that does
    support passwords without this screen changing. */
 
-function SignIn() {
+function SignIn({ onImpressum }: { onImpressum: () => void }) {
   const {
     busy,
     error,
@@ -201,6 +201,9 @@ function SignIn() {
         <p className="auth-foot">
           Reading works without an account. Nothing leaves this device until you sign in.
         </p>
+        <button className="linky muted" onClick={onImpressum}>
+          Impressum
+        </button>
       </div>
     </div>
   );
@@ -208,7 +211,7 @@ function SignIn() {
 
 /* ── signed in ───────────────────────────────────────────────────── */
 
-function SignedIn() {
+function SignedIn({ onImpressum }: { onImpressum: () => void }) {
   const { status, step, error, lastSyncedAt, pendingUploads, missingFiles, syncNow, downloadAll, init, forget } =
     useSync();
   const { books, sessions } = useLibrary();
@@ -400,6 +403,10 @@ function SignedIn() {
         {capabilities.passkeys && passkeysUsable && <Passkeys />}
 
         {status === 'error' && error && <div className="auth-msg bad">{error}</div>}
+
+        <button className="linky muted" onClick={onImpressum} style={{ marginTop: 'var(--s4)' }}>
+          Impressum
+        </button>
       </div>
     </div>
   );
@@ -484,7 +491,7 @@ function deviceName(): string {
 
 /* ── no backend configured ───────────────────────────────────────── */
 
-function NotConfigured() {
+function NotConfigured({ onImpressum }: { onImpressum: () => void }) {
   return (
     <div className="scroller">
       <div className="wrap auth">
@@ -498,6 +505,9 @@ function NotConfigured() {
           Soluna's own Worker — same origin, nothing else to configure — and
           accounts appear here.
         </p>
+        <button className="linky muted" onClick={onImpressum}>
+          Impressum
+        </button>
       </div>
     </div>
   );

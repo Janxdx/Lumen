@@ -14,3 +14,7 @@ vite.config.ts.timestamp-*.mjs
 
 # wrangler local state (D1 and R2 live here during `wrangler dev`)
 .wrangler/
+
+# D1 dumps written by scripts/rename-to-soluna.sh — a copy of every account,
+# every session token hash and every stored credential. Backups, not source.
+*-backup-*.sql

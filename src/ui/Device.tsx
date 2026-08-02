@@ -371,9 +371,13 @@ function AddSheet({
     startPage: number;
     currentPage: number;
     device?: string;
+    bookId?: string;
+    linkPinned?: boolean;
   }) => Promise<void>;
 }) {
   const library = useLibrary((s) => s.books);
+  const [mode, setMode] = useState<'custom' | 'library'>('custom');
+  const [libraryId, setLibraryId] = useState('');
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [pages, setPages] = useState('');
@@ -383,6 +387,8 @@ function AddSheet({
 
   useEffect(() => {
     if (!open) return;
+    setMode('custom');
+    setLibraryId('');
     setTitle('');
     setAuthor('');
     setPages('');
@@ -390,7 +396,21 @@ function AddSheet({
     setCurrentPage('');
   }, [open]);
 
-  const valid = title.trim().length > 1 && Number(pages) > 1;
+  // picking a library book fixes the title/author and pins the link;
+  // switching back to custom clears both so nothing is linked silently
+  const pickLibraryBook = (id: string) => {
+    setLibraryId(id);
+    const b = library.find((x) => x.id === id);
+    if (b) {
+      setTitle(b.meta.title ?? '');
+      setAuthor(b.meta.author ?? '');
+    }
+  };
+
+  const valid =
+    title.trim().length > 1 &&
+    Number(pages) > 1 &&
+    (mode === 'custom' || libraryId !== '');
 
   return (
     <Sheet open={open} onClose={onClose}>
@@ -404,43 +424,67 @@ function AddSheet({
         </p>
 
         {library.length > 0 && (
+          <div className="segment" style={{ marginTop: 18 }}>
+            <button
+              className={mode === 'custom' ? 'on' : ''}
+              onClick={() => {
+                setMode('custom');
+                setLibraryId('');
+                setTitle('');
+                setAuthor('');
+              }}
+            >
+              Custom
+            </button>
+            <button
+              className={mode === 'library' ? 'on' : ''}
+              onClick={() => setMode('library')}
+            >
+              From your library
+            </button>
+          </div>
+        )}
+
+        {mode === 'library' && library.length > 0 && (
           <div style={{ marginTop: 18 }}>
-            <div className="label" style={{ marginBottom: 8 }}>
-              Copy details from your library
-            </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {library.slice(0, 8).map((b) => (
-                <button
-                  key={b.id}
-                  className="btn ghost"
-                  style={{ height: 30, fontSize: 12 }}
-                  onClick={() => {
-                    setTitle(b.meta.title ?? '');
-                    setAuthor(b.meta.author ?? '');
-                  }}
-                >
-                  {b.meta.title.slice(0, 28)}
-                </button>
-              ))}
-            </div>
+            <label className="field">
+              <span>Library book</span>
+              <select value={libraryId} onChange={(e) => pickLibraryBook(e.currentTarget.value)}>
+                <option value="">Choose a book…</option>
+                {library.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.meta.title}
+                    {b.meta.author ? ` — ${b.meta.author}` : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="muted" style={{ fontSize: 12.5, marginTop: 6 }}>
+              This links the tracked entry to that book right away, instead of
+              waiting for the title and author to match automatically.
+            </p>
           </div>
         )}
 
         <div className="auth-form" style={{ marginTop: 18 }}>
-          <Field
-            label="Title"
-            value={title}
-            autoFocus
-            onChange={(e) => setTitle(e.currentTarget.value)}
-            placeholder="The Dispossessed"
-          />
-          <Field
-            label="Author"
-            value={author}
-            onChange={(e) => setAuthor(e.currentTarget.value)}
-            placeholder="Ursula K. Le Guin"
-            hint="Matched against your library to link the two automatically."
-          />
+          {mode === 'custom' && (
+            <>
+              <Field
+                label="Title"
+                value={title}
+                autoFocus
+                onChange={(e) => setTitle(e.currentTarget.value)}
+                placeholder="The Dispossessed"
+              />
+              <Field
+                label="Author"
+                value={author}
+                onChange={(e) => setAuthor(e.currentTarget.value)}
+                placeholder="Ursula K. Le Guin"
+                hint="Matched against your library to link the two automatically."
+              />
+            </>
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <Field
               label="Pages on the reader"
@@ -486,6 +530,9 @@ function AddSheet({
               startPage: Math.max(1, Number(startPage) || 1),
               currentPage: Number(currentPage) || 0,
               device: device || undefined,
+              ...(mode === 'library' && libraryId
+                ? { bookId: libraryId, linkPinned: true }
+                : {}),
             })
           }
         >

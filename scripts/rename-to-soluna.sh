@@ -68,8 +68,9 @@ grep -n 'database_id' wrangler.jsonc
 # ── 3. the rows ──────────────────────────────────────────────────────
 #
 # A full export, schema included, replayed into the new database. The dump
-# is left in the repo root on purpose: it is a point-in-time backup of
-# everything you have ever read, and it costs nothing to keep.
+# is left in the repo root on purpose, and gitignored: it is a point-in-time
+# backup of every account and credential, so it belongs on your disk and
+# not in a push.
 #
 # The import is skipped if the new database already has rows, because the
 # dump recreates tables and would fail halfway through on a second run —
