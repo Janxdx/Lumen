@@ -108,6 +108,13 @@ export interface DeviceBookRecord {
   finishedAt?: number;
   /** stable gradient seed, same idea as BookRecord.hue */
   hue: number;
+  /** exact position `currentPage` was set from — a scan match or a library
+      read — kept alongside the page number rather than instead of it, since
+      pace math and the shelf card still want a plain integer. Only trusted
+      by `recomputeBook` while it agrees with `currentPage` within about a
+      page; a page typed by hand afterwards silently outruns it and it goes
+      back to being unused rather than wrong. See `store/device.ts`. */
+  currentLocus?: { spineIndex: number; wordIndex: number; percent: number };
 }
 
 export interface DeviceSessionRecord {
@@ -129,6 +136,12 @@ export interface DeviceSessionRecord {
   mirrorUid?: string;
   note?: string;
   updatedAt: number;
+  /** where a scan matched the stopping point, when this session was logged
+      that way — the exact position, kept separately from the derived
+      `toPage` so later reconciliation doesn't have to re-approximate it */
+  toSpineIndex?: number;
+  toWordIndex?: number;
+  toPercent?: number;
 }
 
 /* ── the passage index ─────────────────────────────────────────────

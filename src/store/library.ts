@@ -10,6 +10,7 @@ import {
 } from '../db';
 import { parseEpub } from '../engine/epub/parse';
 import type { Session } from '../engine/stats';
+import { useDevice } from './device';
 
 /* Announce a local write. The sync module listens and pushes shortly after;
    going through an event rather than importing it keeps the library store
@@ -137,6 +138,19 @@ export const useLibrary = create<LibraryState>((set, get) => ({
       }
     }
     changed();
+
+    /* The reverse of `recomputeBook`'s device→library push: reading further
+       in the app should carry a linked reader-book card forward too, not
+       just the other way round. `store/device.ts` already imports
+       `useLibrary` for the same kind of cross-store reconciliation, so this
+       closes the same loop from the other side rather than opening a new
+       kind of coupling — safe as a static import because both sides only
+       reach for `getState()` inside action bodies, never at module load. */
+    void useDevice.getState().pullFromLibrary(p.bookId, {
+      spineIndex: p.spineIndex,
+      wordIndex: p.wordIndex,
+      percent: p.percent,
+    });
   },
 
   async recordSession(s) {
