@@ -1,9 +1,12 @@
 import { useMemo, useRef, useState } from 'react';
 import { useLibrary } from '../store/library';
+import { useRatings } from '../store/ratings';
 import { BookCover } from './BookCover';
-import { IconCloud, IconPlus, IconTrash } from './Icons';
+import { IconCloud, IconPlus, IconStar, IconTrash } from './Icons';
 import { formatDuration, relativeDate } from '../engine/stats';
+import { RatingSheet } from './RatingSheet';
 import { Sheet } from './Sheet';
+import { useDarkTheme } from './theme';
 import type { BookRecord } from '../db';
 
 export function Library({ onOpen }: { onOpen: (id: string) => void }) {
@@ -12,6 +15,14 @@ export function Library({ onOpen }: { onOpen: (id: string) => void }) {
   const [dragging, setDragging] = useState(false);
   const [detail, setDetail] = useState<BookRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /* Rating from the library, not only from the shelf tab. The moment you
+     want to rate a book is the moment you close it, and that moment ends
+     here — a feature reachable only from its own tab is a feature nobody
+     remembers exists. */
+  const [rating, setRating] = useState<BookRecord | null>(null);
+  const ratings = useRatings((s) => s.ratings);
+  const dark = useDarkTheme();
+  const ratingFor = (id: string) => ratings.find((r) => r.bookId === id);
 
   const recent = useMemo(() => {
     const withProgress = books
@@ -239,10 +250,10 @@ export function Library({ onOpen }: { onOpen: (id: string) => void }) {
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+            <div style={{ display: 'flex', gap: 10, marginTop: 20, flexWrap: 'wrap' }}>
               <button
                 className="btn primary"
-                style={{ flex: 1, justifyContent: 'center' }}
+                style={{ flex: 1, justifyContent: 'center', minWidth: 120 }}
                 onClick={() => {
                   const id = detail.id;
                   setDetail(null);
@@ -250,6 +261,17 @@ export function Library({ onOpen }: { onOpen: (id: string) => void }) {
                 }}
               >
                 Read
+              </button>
+              <button
+                className="btn"
+                onClick={() => {
+                  const book = detail;
+                  setDetail(null);
+                  setRating(book);
+                }}
+              >
+                <IconStar size={16} solid={Boolean(ratingFor(detail.id))} />
+                {ratingFor(detail.id) ? `Rated ${ratingFor(detail.id)?.overall}` : 'Rate'}
               </button>
               <button
                 className="btn"
@@ -264,6 +286,26 @@ export function Library({ onOpen }: { onOpen: (id: string) => void }) {
           </div>
         )}
       </Sheet>
+
+      <RatingSheet
+        open={Boolean(rating)}
+        existing={rating ? (ratingFor(rating.id) ?? null) : null}
+        subject={
+          rating
+            ? {
+                key: `b:${rating.id}`,
+                bookId: rating.id,
+                title: rating.meta.title,
+                author: rating.meta.author ?? '',
+                words: rating.totalWords,
+                finished: Boolean(rating.finishedAt),
+                percent: progress[rating.id]?.percent ?? 0,
+              }
+            : null
+        }
+        dark={dark}
+        onClose={() => setRating(null)}
+      />
     </div>
   );
 }

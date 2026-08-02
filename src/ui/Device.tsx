@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { elapsedOf, useDevice } from '../store/device';
 import { useLibrary } from '../store/library';
+import { BookCover } from './BookCover';
 import { Sheet } from './Sheet';
 import {
   IconCheck,
@@ -27,7 +28,7 @@ import {
   remaining,
   wordsPerPage,
 } from '../engine/device';
-import type { DeviceBookRecord } from '../db';
+import type { BookRecord, DeviceBookRecord } from '../db';
 
 /* ── small pieces ─────────────────────────────────────────────────── */
 
@@ -114,6 +115,7 @@ export function Device() {
   } = useDevice();
   const library = useLibrary((s) => s.books);
   const progress = useLibrary((s) => s.progress);
+  const covers = useLibrary((s) => s.covers);
 
   const [adding, setAdding] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -240,7 +242,11 @@ export function Device() {
                     onClick={() => setDetailId(b.id)}
                   >
                     <div className="cover">
-                      <DeviceCover book={b} />
+                      {linked ? (
+                        <BookCover book={linked} url={covers[linked.id]} />
+                      ) : (
+                        <DeviceCover book={b} />
+                      )}
                       {linked && (
                         <span className="cloud-badge" title={`Linked to ${linked.meta.title}`}>
                           <IconLink size={13} />
@@ -318,6 +324,8 @@ export function Device() {
             sessions={byBook[detail.id] ?? []}
             libraryPercent={detail.bookId ? progress[detail.bookId]?.percent ?? 0 : null}
             libraryTitle={library.find((b) => b.id === detail.bookId)?.meta.title ?? null}
+            linkedBook={library.find((b) => b.id === detail.bookId) ?? null}
+            coverUrl={detail.bookId ? covers[detail.bookId] : undefined}
             totalWords={library.find((b) => b.id === detail.bookId)?.totalWords}
             candidates={library.map((b) => ({
               id: b.id,
@@ -599,6 +607,8 @@ function BookDetail({
   sessions,
   libraryPercent,
   libraryTitle,
+  linkedBook,
+  coverUrl,
   totalWords,
   candidates,
   timerRunning,
@@ -622,6 +632,8 @@ function BookDetail({
   }[];
   libraryPercent: number | null;
   libraryTitle: string | null;
+  linkedBook: BookRecord | null;
+  coverUrl?: string;
   totalWords?: number;
   candidates: { id: string; label: string }[];
   timerRunning: boolean;
@@ -664,7 +676,11 @@ function BookDetail({
             boxShadow: 'var(--shadow-2)',
           }}
         >
-          <DeviceCover book={book} />
+          {linkedBook ? (
+            <BookCover book={linkedBook} url={coverUrl} />
+          ) : (
+            <DeviceCover book={book} />
+          )}
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <h2 className="display" style={{ fontSize: 23 }}>

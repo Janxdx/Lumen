@@ -1,21 +1,37 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLibrary } from './store/library';
 import { useAuth } from './store/auth';
 import { resolveTheme, useSettings } from './store/settings';
 import { initSync, useSync } from './sync/sync';
 import { syncEnabled } from './sync/client';
 import { useDevice } from './store/device';
+import { useRatings } from './store/ratings';
 import { Library } from './ui/Library';
 import { Stats } from './ui/Stats';
 import { Account } from './ui/Account';
 import { Device } from './ui/Device';
+import { Ratings } from './ui/Ratings';
 import { Reader } from './ui/Reader';
-import { IconAccount, IconDevice, IconLibrary, IconStats } from './ui/Icons';
+import { IconAccount, IconDevice, IconLibrary, IconShelf, IconStats } from './ui/Icons';
 
-type Tab = 'library' | 'device' | 'stats' | 'account';
+type Tab = 'library' | 'device' | 'shelf' | 'stats' | 'account';
+
+const TABS: Tab[] = ['library', 'device', 'shelf', 'stats', 'account'];
+
+/* Which tab the address bar is asking for.
+
+   There is no router here and there does not need to be one — the tabs are
+   state, not pages. But the magic-link callback has to land somewhere, and
+   the Worker sends it to `#/account`, so the hash is read once at boot and
+   kept in step afterwards. Anything unrecognised means the library, which
+   is also what an empty hash means. */
+function tabFromHash(): Tab {
+  const name = location.hash.replace(/^#\/?/, '').split('?')[0] as Tab;
+  return TABS.includes(name) ? name : 'library';
+}
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>('library');
+  const [tab, setTab] = useState<Tab>(tabFromHash);
   const [reading, setReading] = useState<string | null>(null);
   const load = useLibrary((s) => s.load);
   const loading = useLibrary((s) => s.loading);
@@ -25,6 +41,7 @@ export default function App() {
 
   useEffect(() => {
     void load();
+    void useRatings.getState().load();
   }, [load]);
 
   /* The device shelf loads alongside the library, and every time the library
@@ -56,6 +73,30 @@ export default function App() {
     });
   }, []);
 
+  /* Keep the hash pointing at the tab you are on, so a reload puts you back
+     where you were rather than in the library.
+
+     Deliberately skipped on the first render. The hash arriving from the
+     callback carries `?welcome=1`, and the account store reads that in an
+     effect of its own to show "Signed in." — writing over it here would
+     make whether the message appears depend on which effect happened to run
+     first. */
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    history.replaceState(null, '', `${location.pathname}#/${tab}`);
+  }, [tab]);
+
+  /* Back and forward should move between tabs, not out of the app. */
+  useEffect(() => {
+    const onPop = () => setTab(tabFromHash());
+    window.addEventListener('hashchange', onPop);
+    return () => window.removeEventListener('hashchange', onPop);
+  }, []);
+
   /* theme follows the setting, and tracks the system when set to auto */
   useEffect(() => {
     const apply = () => {
@@ -80,6 +121,8 @@ export default function App() {
         <Library onOpen={setReading} />
       ) : tab === 'device' ? (
         <Device />
+      ) : tab === 'shelf' ? (
+        <Ratings />
       ) : tab === 'stats' ? (
         <Stats />
       ) : (
@@ -97,6 +140,9 @@ export default function App() {
           <button className={tab === 'device' ? 'on' : ''} onClick={() => setTab('device')}>
             <IconDevice size={18} /> Reader
             {timerRunning && <i className="dot live" aria-hidden />}
+          </button>
+          <button className={tab === 'shelf' ? 'on' : ''} onClick={() => setTab('shelf')}>
+            <IconShelf size={18} /> Shelf
           </button>
           <button className={tab === 'stats' ? 'on' : ''} onClick={() => setTab('stats')}>
             <IconStats size={18} /> Statistics

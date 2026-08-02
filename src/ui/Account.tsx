@@ -10,6 +10,7 @@ import {
   IconCloud,
   IconDownload,
   IconExit,
+  IconKey,
   IconSync,
 } from './Icons';
 
@@ -23,54 +24,57 @@ const relative = (t: number | null): string => {
 };
 
 export function Account() {
-  const { ready, user, busy, error, notice, signIn, signUp, signOut, resetPassword, clearMessages } =
-    useAuth();
+  const { ready, user, init } = useAuth();
+
+  useEffect(() => {
+    init();
+  }, [init]);
 
   if (!syncEnabled) return <NotConfigured />;
   if (!ready) return <div className="scroller" />;
 
-  return user ? (
-    <SignedIn onSignOut={signOut} email={user.email} busy={busy} />
-  ) : (
-    <SignIn
-      busy={busy}
-      error={error}
-      notice={notice}
-      onSignIn={signIn}
-      onSignUp={signUp}
-      onReset={resetPassword}
-      onEdit={clearMessages}
-    />
-  );
+  return user ? <SignedIn /> : <SignIn />;
 }
 
 /* ── signed out ──────────────────────────────────────────────────── */
 
-interface SignInProps {
-  busy: boolean;
-  error: string | null;
-  notice: string | null;
-  onSignIn(email: string, password: string): Promise<boolean>;
-  onSignUp(email: string, password: string): Promise<boolean>;
-  onReset(email: string): Promise<boolean>;
-  onEdit(): void;
-}
+/* One screen, two shapes. Which one appears is decided by what the backend
+   can actually do rather than by a build-time flag: the Worker offers a
+   link and a passkey, Supabase offers a password. Rendering from
+   capabilities means neither ever shows a control that would error. */
 
-function SignIn({ busy, error, notice, onSignIn, onSignUp, onReset, onEdit }: SignInProps) {
+function SignIn() {
+  const {
+    busy,
+    error,
+    notice,
+    capabilities,
+    passkeysUsable,
+    signIn,
+    signUp,
+    resetPassword,
+    requestLink,
+    signInWithPasskey,
+    clearMessages,
+  } = useAuth();
+
   const [mode, setMode] = useState<'in' | 'up'>('in');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
   const books = useLibrary((s) => s.books.length);
+  const linkOnly = capabilities.magicLink && !capabilities.passwords;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (busy) return;
-    if (mode === 'in') await onSignIn(email, password);
-    else await onSignUp(email, password);
+    if (linkOnly) await requestLink(email);
+    else if (mode === 'in') await signIn(email, password);
+    else await signUp(email, password);
   };
 
-  const valid = /\S+@\S+\.\S+/.test(email) && password.length >= 6;
+  const emailOk = /\S+@\S+\.\S+/.test(email);
+  const valid = linkOnly ? emailOk : emailOk && password.length >= 6;
 
   return (
     <div className="scroller">
@@ -80,13 +84,33 @@ function SignIn({ busy, error, notice, onSignIn, onSignUp, onReset, onEdit }: Si
         </div>
 
         <h1 className="display">
-          {mode === 'in' ? 'Welcome back' : 'Keep your library'}
+          {linkOnly ? 'Your library, everywhere' : mode === 'in' ? 'Welcome back' : 'Keep your library'}
         </h1>
         <p className="auth-lede">
-          {mode === 'in'
-            ? 'Sign in to pick up exactly where you left off, on any device.'
-            : 'An account syncs your books, your place in each one, and every statistic across your devices.'}
+          {linkOnly
+            ? 'Enter your email and we’ll send a link. No password to choose, forget, or have stolen.'
+            : mode === 'in'
+              ? 'Sign in to pick up exactly where you left off, on any device.'
+              : 'An account syncs your books, your place in each one, and every statistic across your devices.'}
         </p>
+
+        {/* Offered first, because on a device that already has a passkey it
+            is the whole sign-in: one prompt, no typing, no inbox. */}
+        {capabilities.passkeys && passkeysUsable && (
+          <>
+            <button
+              className="btn primary auth-submit"
+              disabled={busy}
+              onClick={() => void signInWithPasskey()}
+            >
+              <IconKey size={16} />
+              Sign in with a passkey
+            </button>
+            <div className="auth-or">
+              <span>or</span>
+            </div>
+          </>
+        )}
 
         <form className="auth-form" onSubmit={submit}>
           <label className="field">
@@ -101,66 +125,76 @@ function SignIn({ busy, error, notice, onSignIn, onSignUp, onReset, onEdit }: Si
               placeholder="you@example.com"
               onChange={(e) => {
                 setEmail(e.target.value);
-                onEdit();
+                clearMessages();
               }}
             />
           </label>
 
-          <label className="field">
-            <span>Password</span>
-            <input
-              type="password"
-              autoComplete={mode === 'in' ? 'current-password' : 'new-password'}
-              value={password}
-              placeholder={mode === 'up' ? 'At least 6 characters' : '••••••••'}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                onEdit();
-              }}
-            />
-          </label>
+          {capabilities.passwords && (
+            <label className="field">
+              <span>Password</span>
+              <input
+                type="password"
+                autoComplete={mode === 'in' ? 'current-password' : 'new-password'}
+                value={password}
+                placeholder={mode === 'up' ? 'At least 6 characters' : '••••••••'}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  clearMessages();
+                }}
+              />
+            </label>
+          )}
 
           {error && <div className="auth-msg bad">{error}</div>}
           {notice && <div className="auth-msg good">{notice}</div>}
 
           <button className="btn primary auth-submit" disabled={!valid || busy}>
-            {busy ? 'One moment…' : mode === 'in' ? 'Sign in' : 'Create account'}
+            {busy
+              ? 'One moment…'
+              : linkOnly
+                ? 'Email me a link'
+                : mode === 'in'
+                  ? 'Sign in'
+                  : 'Create account'}
           </button>
         </form>
 
-        <div className="auth-alt">
-          {mode === 'in' ? (
-            <>
+        {capabilities.passwords && (
+          <div className="auth-alt">
+            {mode === 'in' ? (
+              <>
+                <button
+                  className="linky"
+                  onClick={() => {
+                    setMode('up');
+                    clearMessages();
+                  }}
+                >
+                  Create an account
+                </button>
+                <button className="linky muted" onClick={() => void resetPassword(email)}>
+                  Forgot password
+                </button>
+              </>
+            ) : (
               <button
                 className="linky"
                 onClick={() => {
-                  setMode('up');
-                  onEdit();
+                  setMode('in');
+                  clearMessages();
                 }}
               >
-                Create an account
+                I already have an account
               </button>
-              <button className="linky muted" onClick={() => void onReset(email)}>
-                Forgot password
-              </button>
-            </>
-          ) : (
-            <button
-              className="linky"
-              onClick={() => {
-                setMode('in');
-                onEdit();
-              }}
-            >
-              I already have an account
-            </button>
-          )}
-        </div>
+            )}
+          </div>
+        )}
 
-        {books > 0 && mode === 'up' && (
+        {books > 0 && (
           <p className="auth-foot">
             The {books} {books === 1 ? 'book' : 'books'} already on this device will be
-            uploaded to your new account.
+            uploaded once you sign in.
           </p>
         )}
         <p className="auth-foot">
@@ -173,24 +207,32 @@ function SignIn({ busy, error, notice, onSignIn, onSignUp, onReset, onEdit }: Si
 
 /* ── signed in ───────────────────────────────────────────────────── */
 
-function SignedIn({
-  email,
-  busy,
-  onSignOut,
-}: {
-  email: string;
-  busy: boolean;
-  onSignOut(): Promise<void>;
-}) {
+function SignedIn() {
   const { status, step, error, lastSyncedAt, pendingUploads, missingFiles, syncNow, downloadAll, init, forget } =
     useSync();
   const { books, sessions } = useLibrary();
+  const {
+    user,
+    busy,
+    notice,
+    error: authError,
+    capabilities,
+    passkeysUsable,
+    loadPasskeys,
+    resendConfirmation,
+    recheck,
+    signOut,
+  } = useAuth();
   const [confirming, setConfirming] = useState(false);
+
+  const email = user?.email ?? '';
+  const verified = user?.verified ?? true;
 
   useEffect(() => {
     void init();
     void syncNow();
-  }, [init, syncNow]);
+    void loadPasskeys();
+  }, [init, syncNow, loadPasskeys]);
 
   const t = useMemo(() => totals(sessions), [sessions]);
   const initial = email.trim().charAt(0).toUpperCase() || '?';
@@ -198,16 +240,52 @@ function SignedIn({
   const label =
     status === 'syncing'
       ? (step ?? 'Syncing…')
-      : status === 'offline'
-        ? 'Offline — will sync when you reconnect'
-        : status === 'error'
-          ? (error ?? 'Sync failed')
-          : `Last synced ${relative(lastSyncedAt)}`;
+      : status === 'unverified'
+        ? 'Sync paused — email not confirmed'
+        : status === 'offline'
+          ? 'Offline — will sync when you reconnect'
+          : status === 'error'
+            ? (error ?? 'Sync failed')
+            : `Last synced ${relative(lastSyncedAt)}`;
 
   return (
     <div className="scroller">
       <div className="wrap">
         <div className="eyebrow">Account</div>
+
+        {!verified && (
+          <div className="panel warn">
+            <div className="row">
+              <div>
+                <div className="label">Confirm your email</div>
+                <div className="hint">
+                  Your library keeps working on this iPad. Syncing to other
+                  devices starts once you open the link sent to {email}.
+                </div>
+                {notice && <div className="hint good">{notice}</div>}
+                {authError && <div className="hint bad">{authError}</div>}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn ghost" disabled={busy} onClick={() => void recheck()}>
+                  I've confirmed
+                </button>
+                <button
+                  className="btn"
+                  disabled={busy}
+                  onClick={() => void resendConfirmation()}
+                >
+                  Resend
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {verified && (notice || authError) && (
+          <div className={`auth-msg ${authError ? 'bad' : 'good'} acct-msg`}>
+            {authError ?? notice}
+          </div>
+        )}
 
         <div className="acct-head">
           <div className="avatar">{initial}</div>
@@ -249,12 +327,14 @@ function SignedIn({
             <div>
               <div className="label">Sync now</div>
               <div className="hint">
-                Progress, statistics, bookmarks and settings, both ways.
+                {verified
+                  ? 'Progress, statistics, bookmarks and settings, both ways.'
+                  : 'Available once your email is confirmed.'}
               </div>
             </div>
             <button
               className="btn"
-              disabled={status === 'syncing'}
+              disabled={status === 'syncing' || !verified}
               onClick={() => void syncNow()}
             >
               <IconSync size={16} className={status === 'syncing' ? 'spin' : undefined} />
@@ -300,7 +380,7 @@ function SignedIn({
                     void (async () => {
                       await syncNow();
                       await forget();
-                      await onSignOut();
+                      await signOut();
                     })();
                   }}
                 >
@@ -316,10 +396,89 @@ function SignedIn({
           </div>
         </div>
 
+        {capabilities.passkeys && passkeysUsable && <Passkeys />}
+
         {status === 'error' && error && <div className="auth-msg bad">{error}</div>}
       </div>
     </div>
   );
+}
+
+/* ── passkeys ────────────────────────────────────────────────────────
+
+   Registering one here is what turns the next sign-in from an email round
+   trip into a glance at the camera. Kept as its own panel because it is
+   about this *device*, not about the account: the list is every device that
+   can currently get in, which is also the list you revoke from when one of
+   them is no longer yours. */
+
+function Passkeys() {
+  const { passkeys, busy, addPasskey, removePasskey } = useAuth();
+
+  /* A default worth having: without a name, a list of three passkeys is
+     three identical rows and the revoke button becomes a guess. */
+  const suggested = useMemo(() => deviceName(), []);
+
+  return (
+    <div className="panel">
+      <h3>
+        Passkeys
+        <span>{passkeys.length || ''}</span>
+      </h3>
+
+      {passkeys.length === 0 ? (
+        <p className="hint" style={{ marginBottom: 'var(--s4)' }}>
+          Add one and this device signs in with Face ID — no link, no inbox, nothing
+          to type. It stays in your keychain and never reaches the server.
+        </p>
+      ) : (
+        <ul className="key-list">
+          {passkeys.map((k) => (
+            <li key={k.id}>
+              <div>
+                <div className="label">{k.label || 'Unnamed device'}</div>
+                <div className="hint">
+                  Added {new Date(k.createdAt).toLocaleDateString()}
+                  {k.lastUsedAt
+                    ? ` · last used ${relative(k.lastUsedAt)}`
+                    : ' · not used yet'}
+                </div>
+              </div>
+              <button
+                className="linky muted"
+                disabled={busy}
+                onClick={() => void removePasskey(k.id)}
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <button
+        className="btn"
+        disabled={busy}
+        onClick={() => void addPasskey(suggested)}
+      >
+        <IconKey size={16} />
+        Add a passkey for this device
+      </button>
+    </div>
+  );
+}
+
+/* A readable guess at what this device is, from the only clue available.
+   Wrong occasionally, editable never — but "iPad" beside a date is enough
+   to tell three entries apart, which is all the label is for. */
+function deviceName(): string {
+  const ua = navigator.userAgent;
+  if (/iPad/.test(ua)) return 'iPad';
+  if (/iPhone/.test(ua)) return 'iPhone';
+  if (/Android/.test(ua)) return 'Android device';
+  if (/Macintosh/.test(ua)) return 'Mac';
+  if (/Windows/.test(ua)) return 'Windows PC';
+  return 'This device';
 }
 
 /* ── no backend configured ───────────────────────────────────────── */

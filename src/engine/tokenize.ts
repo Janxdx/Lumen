@@ -5,14 +5,21 @@
    word by index, pagination can ask which page a word landed on, and word
    counts for statistics are exact rather than estimated. */
 
-const HAS_CONTENT = /[\p{L}\p{N}]/u;
+export const HAS_CONTENT = /[\p{L}\p{N}]/u;
 
-/** Count words in a raw HTML/XHTML string (used at import time). */
-export function countWords(html: string): number {
-  const text = html
+/** Readable text from chapter markup. Anything that counts or indexes words
+    has to strip the markup the same way, or the indices stop agreeing with
+    the spans on the page — so there is exactly one place that does it. */
+export function plainText(html: string): string {
+  return html
     .replace(/<(script|style|head)[\s\S]*?<\/\1>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&[a-z]+;|&#\d+;/gi, ' ');
+}
+
+/** Count words in a raw HTML/XHTML string (used at import time). */
+export function countWords(html: string): number {
+  const text = plainText(html);
   let n = 0;
   for (const token of text.split(/\s+/)) if (HAS_CONTENT.test(token)) n++;
   return n;

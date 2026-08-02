@@ -1,0 +1,22 @@
+{
+  /* The Worker runs in a different world than the app: no DOM, no window,
+     but D1Database, R2Bucket and the rest of the runtime's globals. Type
+     checking it against the browser's lib would accept code that cannot
+     run and reject code that can, so it gets its own config. */
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["@cloudflare/workers-types"],
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["."]
+}

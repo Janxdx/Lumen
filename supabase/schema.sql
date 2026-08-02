@@ -144,6 +144,35 @@ create table if not exists public.bookmarks (
   primary key (user_id, uid)
 );
 
+-- ── ratings ────────────────────────────────────────────────────────
+-- What you thought of a book. Deliberately not a column on `books`: a
+-- rating outlives the EPUB it describes (deleting a file to save space
+-- must not delete the verdict) and can be about a book only ever read on
+-- a physical e-reader, so `book_id` and `device_book_id` are both nullable
+-- and both may be null at once. Title and author are copied in for exactly
+-- that case, which is why they are stored rather than joined.
+create table if not exists public.ratings (
+  user_id        uuid    not null references auth.users(id) on delete cascade,
+  id             text    not null,
+  book_id        text,
+  device_book_id text,
+  title          text    not null default '',
+  author         text    not null default '',
+  overall        real    not null default 0,       -- 0–10 in half steps
+  axes           jsonb   not null default '{}'::jsonb,  -- prose, pacing, …
+  mood           text,
+  note           text,
+  favourite      boolean not null default false,
+  words          integer,                          -- spine thickness on the shelf
+  rated_at       bigint  not null default 0,
+  updated_at     bigint  not null default 0,
+  deleted        boolean not null default false,
+  synced_at      timestamptz not null default now(),
+  primary key (user_id, id)
+);
+
+create index if not exists ratings_book_idx on public.ratings (user_id, book_id);
+
 -- ── settings ───────────────────────────────────────────────────────
 -- The whole settings object as one JSON blob: it is small, always written
 -- as a unit, and this keeps schema churn out of the server when a new
@@ -175,7 +204,7 @@ do $$
 declare t text;
 begin
   foreach t in array array['books', 'progress', 'sessions', 'bookmarks', 'settings',
-                        'device_books', 'device_sessions']
+                        'device_books', 'device_sessions', 'ratings']
   loop
     execute format('drop trigger if exists %I on public.%I', t || '_touch', t);
     execute format(
@@ -194,7 +223,37 @@ end $$;
 --  only ever touch rows whose user_id matches the caller's JWT — the
 --  client cannot opt out, so a bug in the app can't leak another user's
 --  data.
+--
+--  Two conditions, not one. Ownership is the obvious half. The second is
+--  that the account's email has actually been confirmed: a signed-in but
+--  unverified session is refused by the database, not merely hidden by the
+--  UI. That distinction matters because the anon key is public — anyone
+--  can talk to the API directly, so a check that only lives in React is
+--  decoration. Sync becomes possible the moment the link is clicked, with
+--  no re-deploy and no new session.
 -- ═══════════════════════════════════════════════════════════════════
+
+-- Reads the confirmation state out of `auth.users`, which the caller cannot
+-- select from directly — hence security definer, pinned search_path, and a
+-- body narrow enough that it can't leak anything but this one boolean.
+-- Self-hosting note: this is the only other Supabase-specific function
+-- besides auth.uid(); on your own server it becomes a lookup in whatever
+-- table holds your users.
+create or replace function public.email_verified()
+returns boolean
+language sql
+stable
+security definer
+set search_path = auth, public
+as $$
+  select coalesce(
+    (select email_confirmed_at is not null from auth.users where id = auth.uid()),
+    false
+  )
+$$;
+
+revoke all on function public.email_verified() from public;
+grant execute on function public.email_verified() to authenticated;
 
 alter table public.books     enable row level security;
 alter table public.progress  enable row level security;
@@ -203,19 +262,21 @@ alter table public.bookmarks enable row level security;
 alter table public.settings  enable row level security;
 alter table public.device_books    enable row level security;
 alter table public.device_sessions enable row level security;
+alter table public.ratings         enable row level security;
 
 do $$
 declare t text;
 begin
   foreach t in array array['books', 'progress', 'sessions', 'bookmarks', 'settings',
-                        'device_books', 'device_sessions']
+                        'device_books', 'device_sessions', 'ratings']
   loop
     execute format('drop policy if exists %I on public.%I', t || '_owner', t);
     execute format(
       'create policy %I on public.%I
          for all
-         using (user_id = auth.uid())
-         with check (user_id = auth.uid())',
+         to authenticated
+         using (user_id = auth.uid() and public.email_verified())
+         with check (user_id = auth.uid() and public.email_verified())',
       t || '_owner', t
     );
   end loop;
@@ -240,20 +301,28 @@ drop policy if exists "books delete own" on storage.objects;
 
 create policy "books read own" on storage.objects
   for select using (
-    bucket_id = 'books' and (storage.foldername(name))[1] = auth.uid()::text
+    bucket_id = 'books'
+    and (storage.foldername(name))[1] = auth.uid()::text
+    and public.email_verified()
   );
 
 create policy "books write own" on storage.objects
   for insert with check (
-    bucket_id = 'books' and (storage.foldername(name))[1] = auth.uid()::text
+    bucket_id = 'books'
+    and (storage.foldername(name))[1] = auth.uid()::text
+    and public.email_verified()
   );
 
 create policy "books update own" on storage.objects
   for update using (
-    bucket_id = 'books' and (storage.foldername(name))[1] = auth.uid()::text
+    bucket_id = 'books'
+    and (storage.foldername(name))[1] = auth.uid()::text
+    and public.email_verified()
   );
 
 create policy "books delete own" on storage.objects
   for delete using (
-    bucket_id = 'books' and (storage.foldername(name))[1] = auth.uid()::text
+    bucket_id = 'books'
+    and (storage.foldername(name))[1] = auth.uid()::text
+    and public.email_verified()
   );

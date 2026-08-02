@@ -68,6 +68,19 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
+  /* The API is never cached, and this exclusion has to live here.
+     `/auth/me` answers "who is signed in", and the handler below stores any
+     response that is `ok` — so the "nobody" served before sign-in would be
+     replayed from the cache afterwards, leaving the app permanently signed
+     out with the cookie sitting there unused. The `no-store` the Worker
+     sends does not prevent it: the Cache API is not the HTTP cache and does
+     not read Cache-Control at all.
+
+     `/auth/` is excluded before the navigation branch too, so the magic-link
+     callback is a plain browser navigation and its Set-Cookie is handled
+     the ordinary way. */
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/auth/')) return;
+
   if (request.mode === 'navigate') {
     event.respondWith(
       fromNetwork(request, NAV_TIMEOUT_MS)

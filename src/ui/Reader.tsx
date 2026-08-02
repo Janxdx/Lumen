@@ -64,6 +64,14 @@ export function Reader({ bookId, onClose }: { bookId: string; onClose: () => voi
   const spineRef = useRef(0);
   const lastActivityRef = useRef(Date.now());
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  /* set by goChapter when a navigation is a jump (TOC, chapter scrubber)
+     rather than a turn; consumed once the landing chapter finishes
+     rendering, see the jumpRef check below */
+  const jumpRef = useRef(false);
+  /* goChapter needs to call flushSession, but flushSession is declared
+     later in this component (it closes over the pacer). A ref sidesteps
+     the ordering problem without hoisting ~150 lines of hooks around. */
+  const flushSessionRef = useRef<() => void>(() => {});
 
   const sessionRef = useRef({
     start: Date.now(),
@@ -236,6 +244,12 @@ export function Reader({ bookId, onClose }: { bookId: string; onClose: () => voi
     landOnEndRef.current = false;
 
     relayout(start, toEnd);
+    if (jumpRef.current) {
+      // land from a jump: count from here, not from where we jumped off
+      sessionRef.current.startWords = globalWords(spineRef.current, wordRef.current);
+      sessionRef.current.pages = 0;
+      jumpRef.current = false;
+    }
     pacer.load(
       spansRef.current.map((s) => s.textContent ?? ''),
       wordRef.current
@@ -279,10 +293,22 @@ export function Reader({ bookId, onClose }: { bookId: string; onClose: () => voi
 
   /* ── chapter navigation ──────────────────────────────────────── */
   const goChapter = useCallback(
-    (index: number, word = 0, toEnd = false) => {
+    (index: number, word = 0, toEnd = false, jump = false) => {
       const b = bookRef.current;
       if (!b) return false;
       if (index < 0 || index >= b.spine.length) return false;
+      /* A jump — the TOC or the chapter scrubber, unlike turning pages —
+         can leap over thousands of words in an instant, e.g. catching the
+         app up after finishing a chapter somewhere else. Bank whatever was
+         genuinely read up to now as its own session, then start the next
+         one counting from the landing spot once it's rendered (see the
+         jumpRef check in the chapter-render effect below). Otherwise the
+         skipped words get credited as read in whatever few seconds the
+         jump itself took — a session that "finishes" a chapter in no time. */
+      if (jump && index !== spineRef.current) {
+        flushSessionRef.current();
+        jumpRef.current = true;
+      }
       startWordRef.current = word;
       landOnEndRef.current = toEnd;
       setSpineIndex(index);
@@ -447,31 +473,55 @@ export function Reader({ bookId, onClose }: { bookId: string; onClose: () => voi
   }, [bookId, globalWords, pacer, recordSession]);
 
   useEffect(() => {
+    flushSessionRef.current = flushSession;
+  }, [flushSession]);
+
+  /* ── progress persistence ─────────────────────────────────────────
+     `flushProgress` reads only refs, never render-time state, so it gives
+     the exact same answer whether it fires from the debounce below or from
+     an unmount/visibility handler that runs after this render has gone
+     stale. That matters: closing the reader — tapping back, backgrounding
+     the app, the iPad locking mid-chapter — used to race the 1.2s debounce.
+     Turn a page, leave within that window, and the position write was
+     simply dropped: not saved locally, so sync had nothing newer to send,
+     and the *next* device to open the book landed wherever the last debounce
+     happened to land, sometimes a chapter or two short. Every exit path now
+     forces the same immediate write the debounce would have made anyway. */
+  const flushProgress = useCallback(() => {
+    const b = bookRef.current;
+    if (!b) return;
+    const total = b.totalWords || 1;
+    void saveProgress({
+      bookId,
+      spineIndex: spineRef.current,
+      wordIndex: wordRef.current,
+      percent: Math.min(1, globalWords(spineRef.current, wordRef.current) / total),
+      updatedAt: Date.now(),
+    });
+  }, [bookId, globalWords, saveProgress]);
+
+  useEffect(() => {
     const onHide = () => {
-      if (document.visibilityState === 'hidden') flushSession();
+      if (document.visibilityState === 'hidden') {
+        flushSession();
+        flushProgress();
+      }
     };
     document.addEventListener('visibilitychange', onHide);
     return () => {
       document.removeEventListener('visibilitychange', onHide);
       flushSession();
+      flushProgress();
     };
-  }, [flushSession]);
+  }, [flushSession, flushProgress]);
 
-  /* ── progress persistence (debounced) ────────────────────────── */
+  /* the debounced write during active reading — rate-limited so a fast
+     swipe through several pages doesn't hit Dexie on every one */
   useEffect(() => {
     if (!ready || !book) return;
-    const id = window.setTimeout(() => {
-      const total = book.totalWords || 1;
-      void saveProgress({
-        bookId,
-        spineIndex,
-        wordIndex: wordRef.current,
-        percent: Math.min(1, globalWords(spineIndex, wordRef.current) / total),
-        updatedAt: Date.now(),
-      });
-    }, 1200);
+    const id = window.setTimeout(flushProgress, 1200);
     return () => window.clearTimeout(id);
-  }, [ready, book, bookId, spineIndex, page, wordIndex, globalWords, saveProgress]);
+  }, [ready, book, spineIndex, page, wordIndex, flushProgress]);
 
   /* ── input ───────────────────────────────────────────────────── */
   useEffect(() => {
@@ -656,7 +706,7 @@ export function Reader({ bookId, onClose }: { bookId: string; onClose: () => voi
               max={Math.max(0, (book?.spine.length ?? 1) - 1)}
               step={1}
               value={spineIndex}
-              onChange={(e) => goChapter(Number(e.target.value))}
+              onChange={(e) => goChapter(Number(e.target.value), 0, false, true)}
             />
             <span className="num" style={{ minWidth: 96, textAlign: 'right' }}>
               {page + 1}/{pages} · {minutesLeft}m left
@@ -688,7 +738,7 @@ export function Reader({ bookId, onClose }: { bookId: string; onClose: () => voi
               if (entry.spineIndex >= 0) {
                 pacer.pause();
                 setPlaying(false);
-                goChapter(entry.spineIndex);
+                goChapter(entry.spineIndex, 0, false, true);
               }
               setToc(false);
             }}

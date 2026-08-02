@@ -69,8 +69,14 @@ network traffic at all and the Account tab says so; the reader is unchanged.
    redeploy. Vite inlines them at build time, so a redeploy is required.
 
 **What syncs:** the book list, the EPUB files themselves, reading position,
-every session behind the statistics, bookmarks, and your reader settings.
-Signing in on a device that already has books uploads them to the account.
+every session behind the statistics, bookmarks, ratings, and your reader
+settings. Signing in on a device that already has books uploads them to the
+account.
+
+**Upgrading an existing database:** both schema files are idempotent, so when
+a release adds a table you re-run the same file — `supabase/schema.sql` in the
+SQL editor, or `npm run db:remote` for the Worker. Nothing else is needed; the
+local database migrates itself when the app next opens.
 
 **How conflicts resolve:** last write wins, per record. The cursor is the
 server's clock (`synced_at`), never the device's, so two iPads with clocks a
@@ -135,6 +141,31 @@ words here, so set *body starts on page* if the book has a lot of it. And
 within a chapter the position is proportional — pages can locate you to within
 a chapter exactly, and to a few paragraphs inside it.
 
+## Rating what you read
+
+The **Shelf** tab is where a finished book becomes an opinion. Reachable from
+the tab bar, or straight from a book's *Details* in the library.
+
+- **One number and five reasons.** A 0–10 verdict in half steps, plus prose,
+  pacing, characters, ideas and feeling. Only the verdict is required; an axis
+  you never touch stays unjudged rather than becoming a zero. Tap a mark again
+  to unset it.
+- **A mood.** Eight bookbinding-cloth colours — consuming, joyful, comforting,
+  contemplative, haunting, melancholy, brutal, cold — for how the book *felt*,
+  which is a different question from whether it was good.
+- **The wall.** Every rating stands as a spine: colour is the mood, height is
+  the score, thickness is the length of the book. Sort by rating, recency,
+  mood, title or length.
+- **Your curve.** The distribution of your scores with your average marked on
+  it, a radar of what you reward across every rating, and the mood mix as one
+  ribbon. Most people find out they have been giving everything an 8.
+- **A taste card** you can save as an image — the whole shelf, the generated
+  sentence about your taste, and the book you loved most, on one page.
+
+Books read on the e-reader can be rated alongside the EPUBs; the picker offers
+both shelves. And a rating outlives the file it describes — delete a book to
+free space and the verdict stays on the shelf, title and all.
+
 ## Layout
 
 ```
@@ -146,19 +177,22 @@ src/engine/     portable core — no React, no app state
   pacer.ts      dwell modelling and the rAF scheduler
   stats.ts      session aggregation — pure functions over recorded sessions
   device.ts     page ⇄ percent ⇄ word position, pace projection, book matching
+  rating.ts     axes, mood palette, taste profile, shelf sorting
+  tasteCard.ts  the shareable card, built as a string of SVG
 src/db/         IndexedDB (Dexie): books, files, covers, progress, sessions,
-                device books and their logged sessions
+                device books and their logged sessions, ratings
 src/store/      settings, library and account state
 src/sync/       the only code that knows a backend exists
   client.ts     Supabase client + config; absent config disables sync
   mapping.ts    local record ⇄ wire row
   sync.ts       pull → merge → push, plus file upload/download
-src/ui/         Library, Reader, Pacer controls, Device shelf, Statistics,
-                Charts, Account
-tests/          run with `npm test` — the page↔word maths and the store's
-                sync rules. Plain Node, no build step and no test framework:
-                Node strips the types itself and `register.mjs` teaches it
-                the extensionless imports a bundler would resolve
+src/ui/         Library, Reader, Pacer controls, Device shelf, Shelf (ratings),
+                Statistics, Charts, Account
+tests/          run with `npm test` — the page↔word maths, the rating and
+                taste-profile maths, and the store's sync rules. Plain Node,
+                no build step and no test framework: Node strips the types
+                itself and `register.mjs` teaches it the extensionless
+                imports a bundler would resolve
 supabase/       schema.sql — tables, RLS policies, storage bucket
 ```
 
