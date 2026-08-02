@@ -10,6 +10,7 @@ A beautiful EPUB reader for iPad (and iPhone/Mac), built web-first as an install
 2. **Our typography, not the publisher's.** Book CSS is stripped; semantic HTML is kept. Every book reads with the same considered type. This is also what makes pagination and word-level pacing tractable.
 3. **Motion is physical.** Spring easing, transform/opacity only, nothing that reflows during animation.
 4. **Statistics are a reward, not a dashboard.** Rich data, presented as something you *want* to look at after finishing a session.
+5. **Colour is spent in one place.** The whole app runs on a single warm accent so that the shelf — where colour carries meaning rather than decoration — can spend a palette without competing with anything.
 
 ## 2. Design language
 
@@ -22,6 +23,15 @@ A beautiful EPUB reader for iPad (and iPhone/Mac), built web-first as an install
 | Ink (dark) | `#0E0D0C` | `#171614` | `#EDE7DE` | `#D89A5B` |
 
 Accent is a warm amber — used for the pacer highlight, progress arcs, and nothing else. Restraint is the whole design.
+
+**The mood palette** — the one exception, and it exists only on the shelf. Eight bookbinding-cloth colours, stored as HSL parts so the dark theme lifts them rather than keeping a second palette in step.
+
+| | | | |
+|---|---|---|---|
+| Ember · *Consuming* | Gold · *Joyful* | Moss · *Comforting* | Sea · *Contemplative* |
+| Indigo · *Haunting* | Plum · *Melancholy* | Oxblood · *Brutal* | Ash · *Cold* |
+
+They are muted on purpose — cloth, not highlighter pens — because a wall of them has to sit calmly next to warm paper.
 
 **Type** — reading text in a system serif stack (`Iowan Old Style` / `Palatino` / Georgia), UI in the system sans. No web fonts: the app must work fully offline and load instantly.
 
@@ -41,9 +51,11 @@ src/
     pacer.ts       rAF scheduler: WPM + punctuation/length dwell modelling
     stats.ts       session aggregation, streaks, heatmap, WPM trend
     device.ts      page ⇄ percent ⇄ word position, pace projection, matching
-  db/              Dexie (IndexedDB): books, files, progress, sessions, settings
+    rating.ts      axes, mood palette, taste profile, shelf sorting
+    tasteCard.ts   the shareable card, built as a string of SVG
+  db/              Dexie (IndexedDB): books, files, progress, sessions, ratings, settings
   store/           app state (zustand)
-  ui/              Library · Reader · Pacer · Device · Stats · Settings
+  ui/              Library · Reader · Pacer · Device · Shelf · Stats · Settings
 ```
 
 `engine/` never imports React. In a native shell the reading surface is a `WKWebView` running the same engine — which is what Apple Books and Kindle do, since EPUB *is* HTML and CSS.
@@ -73,6 +85,22 @@ session is mirrored into the ordinary session history, so reading done away
 from the app counts towards every statistic. Books link to their library
 counterpart by exact title and author, and progress only ever moves forward —
 a reader entry behind the app is recorded but does not rewind your place.
+
+**The shelf** — what you thought of what you read.
+
+One number is the verdict; five more are the reasons (prose, pacing, characters, ideas, feeling); a mood colour is how it felt. Nothing is required except the verdict — a rating you had to fill in completely is a rating you would not have bothered to make, and an axis you never touched stays *absent* rather than becoming a zero that would drag every average down.
+
+A rating is its own record, not a column on a book. It carries the title and author, so it survives the EPUB being deleted to free space and can be about a book only ever read on the e-reader. Both shelves feed the picker.
+
+The screen itself is a wall of standing spines, and it reads three properties without a legend because a real shelf already has them:
+
+- **colour** — the mood
+- **height** — the score (a nought still stands at 40%; a book you hated is still a book you finished)
+- **thickness** — the length of the book, mapped logarithmically and clamped, so a novella is not a hairline and an omnibus is not a wall of its own
+
+Sort by rating, recency, mood, title or length. Underneath: your score distribution with your average marked on it — almost everyone discovers a spike at 8 with nothing below 6 — a radar of what you reward across every rating, and the mood mix as one ribbon of cloth.
+
+**The taste card** — the whole shelf as one shareable image: the generated sentence about you, the average, the spines in miniature, the curve, the colours, and the book you loved most. Authored as a string of SVG and used twice, rendered inline and rasterised into a PNG, so the saved image cannot drift from the preview. Saved through the share sheet where there is one.
 
 **Statistics** — tracked per session and rolled up:
 

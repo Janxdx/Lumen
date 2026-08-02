@@ -1527,6 +1527,9 @@ input[type='range']::-moz-range-thumb {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
+  /* stated explicitly: `stretch` would let wrapped rows grow to fill spare
+     height, and the shelf-line gradient below depends on a constant pitch */
+  align-content: flex-start;
   gap: var(--row-gap) 0;
   padding-top: 6px;
   /* The shelf line under each row. A repeating gradient rather than a
