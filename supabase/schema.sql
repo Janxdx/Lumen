@@ -144,6 +144,35 @@ create table if not exists public.bookmarks (
   primary key (user_id, uid)
 );
 
+-- ── ratings ────────────────────────────────────────────────────────
+-- What you thought of a book. Deliberately not a column on `books`: a
+-- rating outlives the EPUB it describes (deleting a file to save space
+-- must not delete the verdict) and can be about a book only ever read on
+-- a physical e-reader, so `book_id` and `device_book_id` are both nullable
+-- and both may be null at once. Title and author are copied in for exactly
+-- that case, which is why they are stored rather than joined.
+create table if not exists public.ratings (
+  user_id        uuid    not null references auth.users(id) on delete cascade,
+  id             text    not null,
+  book_id        text,
+  device_book_id text,
+  title          text    not null default '',
+  author         text    not null default '',
+  overall        real    not null default 0,       -- 0–10 in half steps
+  axes           jsonb   not null default '{}'::jsonb,  -- prose, pacing, …
+  mood           text,
+  note           text,
+  favourite      boolean not null default false,
+  words          integer,                          -- spine thickness on the shelf
+  rated_at       bigint  not null default 0,
+  updated_at     bigint  not null default 0,
+  deleted        boolean not null default false,
+  synced_at      timestamptz not null default now(),
+  primary key (user_id, id)
+);
+
+create index if not exists ratings_book_idx on public.ratings (user_id, book_id);
+
 -- ── settings ───────────────────────────────────────────────────────
 -- The whole settings object as one JSON blob: it is small, always written
 -- as a unit, and this keeps schema churn out of the server when a new
@@ -175,7 +204,7 @@ do $$
 declare t text;
 begin
   foreach t in array array['books', 'progress', 'sessions', 'bookmarks', 'settings',
-                        'device_books', 'device_sessions']
+                        'device_books', 'device_sessions', 'ratings']
   loop
     execute format('drop trigger if exists %I on public.%I', t || '_touch', t);
     execute format(
@@ -233,12 +262,13 @@ alter table public.bookmarks enable row level security;
 alter table public.settings  enable row level security;
 alter table public.device_books    enable row level security;
 alter table public.device_sessions enable row level security;
+alter table public.ratings         enable row level security;
 
 do $$
 declare t text;
 begin
   foreach t in array array['books', 'progress', 'sessions', 'bookmarks', 'settings',
-                        'device_books', 'device_sessions']
+                        'device_books', 'device_sessions', 'ratings']
   loop
     execute format('drop policy if exists %I on public.%I', t || '_owner', t);
     execute format(

@@ -19,6 +19,7 @@ import type {
   DeviceBookRow,
   DeviceSessionRow,
   ProgressRow,
+  RatingRow,
   SessionRow,
   SettingsRow,
 } from './mapping';
@@ -33,6 +34,7 @@ export interface Changes {
   bookmarks: BookmarkRow[];
   deviceBooks: DeviceBookRow[];
   deviceSessions: DeviceSessionRow[];
+  ratings: RatingRow[];
   settings: SettingsRow | null;
 }
 
@@ -43,6 +45,7 @@ export const emptyChanges = (): Changes => ({
   bookmarks: [],
   deviceBooks: [],
   deviceSessions: [],
+  ratings: [],
   settings: null,
 });
 
@@ -53,7 +56,8 @@ export const isEmpty = (c: Changes): boolean =>
   c.sessions.length === 0 &&
   c.bookmarks.length === 0 &&
   c.deviceBooks.length === 0 &&
-  c.deviceSessions.length === 0;
+  c.deviceSessions.length === 0 &&
+  c.ratings.length === 0;
 
 /* The bookmark of how far a device has read the server's change log.
    Opaque on purpose: Supabase stamps rows with a timestamp and the Worker

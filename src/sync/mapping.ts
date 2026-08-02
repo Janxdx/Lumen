@@ -12,6 +12,7 @@ import type {
   ProgressRecord,
 } from '../db';
 import type { Session } from '../engine/stats';
+import type { AxisKey, MoodKey, RatingRecord } from '../engine/rating';
 import type { BookMeta, SpineEntry, TocEntry } from '../engine/types';
 
 export interface BookRow {
@@ -111,6 +112,29 @@ export interface DeviceSessionRow {
   words: number;
   mirror_uid: string | null;
   note: string | null;
+  updated_at: number;
+  deleted: boolean;
+  synced_at?: string;
+}
+
+export interface RatingRow {
+  user_id: string;
+  id: string;
+  /* Both nullable, and both may be null at once — that is a rating of a
+     book this account no longer holds a copy of, which is a state the shelf
+     is designed to keep rather than an inconsistency to repair. */
+  book_id: string | null;
+  device_book_id: string | null;
+  title: string;
+  author: string;
+  overall: number;
+  /** the five sub-scores; an axis that was never judged is simply absent */
+  axes: Partial<Record<AxisKey, number>>;
+  mood: string | null;
+  note: string | null;
+  favourite: boolean;
+  words: number | null;
+  rated_at: number;
   updated_at: number;
   deleted: boolean;
   synced_at?: string;
@@ -265,6 +289,42 @@ export const rowToDeviceSession = (r: DeviceSessionRow): DeviceSessionRecord => 
   words: r.words,
   ...(r.mirror_uid ? { mirrorUid: r.mirror_uid } : {}),
   ...(r.note ? { note: r.note } : {}),
+  updatedAt: r.updated_at,
+});
+
+/* ── ratings ───────────────────────────────────────────────────── */
+
+export const ratingToRow = (r: RatingRecord, userId: string): RatingRow => ({
+  user_id: userId,
+  id: r.id,
+  book_id: r.bookId ?? null,
+  device_book_id: r.deviceBookId ?? null,
+  title: r.title,
+  author: r.author,
+  overall: r.overall,
+  axes: r.axes ?? {},
+  mood: r.mood ?? null,
+  note: r.note ?? null,
+  favourite: r.favourite ?? false,
+  words: r.words ?? null,
+  rated_at: r.ratedAt,
+  updated_at: r.updatedAt,
+  deleted: false,
+});
+
+export const rowToRating = (r: RatingRow): RatingRecord => ({
+  id: r.id,
+  ...(r.book_id ? { bookId: r.book_id } : {}),
+  ...(r.device_book_id ? { deviceBookId: r.device_book_id } : {}),
+  title: r.title ?? '',
+  author: r.author ?? '',
+  overall: Number(r.overall ?? 0),
+  axes: (r.axes ?? {}) as Partial<Record<AxisKey, number>>,
+  ...(r.mood ? { mood: r.mood as MoodKey } : {}),
+  ...(r.note ? { note: r.note } : {}),
+  ...(r.favourite ? { favourite: true } : {}),
+  ...(r.words ? { words: r.words } : {}),
+  ratedAt: r.rated_at,
   updatedAt: r.updated_at,
 });
 

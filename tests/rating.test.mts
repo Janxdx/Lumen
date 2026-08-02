@@ -118,5 +118,5 @@ ok('an unset mood still yields a colour', moodColor(null, false).startsWith('hsl
 eq('the palette has no duplicate keys', new Set(MOODS.map((m) => m.key)).size, MOODS.length);
 eq('five axes, in a fixed order', AXIS_KEYS, ['prose', 'pacing', 'characters', 'ideas', 'feeling']);
 
-console.log(fails ? `\n${fails} failure(s)` : '\nall passed');
+console.log(fails === 0 ? '\nALL PASS' : `\n${fails} FAILURES`);
 process.exit(fails ? 1 : 0);

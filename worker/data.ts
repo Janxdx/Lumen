@@ -32,6 +32,7 @@ export interface Changes {
   bookmarks: Row[];
   deviceBooks: Row[];
   deviceSessions: Row[];
+  ratings: Row[];
   settings: Row | null;
 }
 
@@ -54,7 +55,7 @@ async function nextSeq(env: Env, userId: string): Promise<number> {
 
 /* ── pull ──────────────────────────────────────────────────────────
 
-   Seven statements, run as one batch so they see a consistent snapshot
+   Eight statements, run as one batch so they see a consistent snapshot
    rather than a moving target. The client merges what comes back; the
    server does not decide who wins, because the client is the only place
    that knows what it already has. */
@@ -65,7 +66,7 @@ export async function pull(env: Env, user: User, cursor: number): Promise<PullRe
       `select * from ${table} where user_id = ? and row_seq > ? order by row_seq`
     ).bind(user.id, cursor);
 
-  const [books, progress, sessions, bookmarks, deviceBooks, deviceSessions, settings] =
+  const [books, progress, sessions, bookmarks, deviceBooks, deviceSessions, ratings, settings] =
     await env.DB.batch<Row>([
       q('books'),
       q('progress'),
@@ -73,6 +74,7 @@ export async function pull(env: Env, user: User, cursor: number): Promise<PullRe
       q('bookmarks'),
       q('device_books'),
       q('device_sessions'),
+      q('ratings'),
       q('settings'),
     ]);
 
@@ -83,6 +85,7 @@ export async function pull(env: Env, user: User, cursor: number): Promise<PullRe
     ...(bookmarks.results ?? []),
     ...(deviceBooks.results ?? []),
     ...(deviceSessions.results ?? []),
+    ...(ratings.results ?? []),
     ...(settings.results ?? []),
   ];
   const highest = all.reduce(
@@ -98,6 +101,7 @@ export async function pull(env: Env, user: User, cursor: number): Promise<PullRe
     bookmarks: bookmarks.results ?? [],
     deviceBooks: deviceBooks.results ?? [],
     deviceSessions: deviceSessions.results ?? [],
+    ratings: (ratings.results ?? []).map(decodeRating),
     settings: decodeSettings((settings.results ?? [])[0]),
   };
 }
@@ -111,6 +115,15 @@ function decodeBook(row: Row): Row {
     meta: parseJson(row.meta, {}),
     spine: parseJson(row.spine, []),
     toc: parseJson(row.toc, []),
+    deleted: Boolean(row.deleted),
+  };
+}
+
+function decodeRating(row: Row): Row {
+  return {
+    ...row,
+    axes: parseJson(row.axes, {}),
+    favourite: Boolean(row.favourite),
     deleted: Boolean(row.deleted),
   };
 }
@@ -327,6 +340,42 @@ export async function push(env: Env, user: User, changes: Partial<Changes>): Pro
         s.note == null ? null : str(s.note),
         num(s.updated_at),
         s.deleted ? 1 : 0,
+        seq
+      )
+    );
+  }
+
+  for (const r of changes.ratings ?? []) {
+    stmts.push(
+      env.DB.prepare(
+        `insert into ratings (user_id, id, book_id, device_book_id, title, author,
+                              overall, axes, mood, note, favourite, words, rated_at,
+                              updated_at, deleted, row_seq)
+         values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         on conflict(user_id, id) do update set
+           book_id = excluded.book_id, device_book_id = excluded.device_book_id,
+           title = excluded.title, author = excluded.author,
+           overall = excluded.overall, axes = excluded.axes, mood = excluded.mood,
+           note = excluded.note, favourite = excluded.favourite, words = excluded.words,
+           rated_at = excluded.rated_at, updated_at = excluded.updated_at,
+           deleted = excluded.deleted, row_seq = excluded.row_seq
+         where excluded.updated_at >= ratings.updated_at`
+      ).bind(
+        uid,
+        str(r.id),
+        r.book_id == null ? null : str(r.book_id),
+        r.device_book_id == null ? null : str(r.device_book_id),
+        str(r.title),
+        str(r.author),
+        Number(r.overall ?? 0),
+        JSON.stringify(r.axes ?? {}),
+        r.mood == null ? null : str(r.mood),
+        r.note == null ? null : str(r.note),
+        r.favourite ? 1 : 0,
+        r.words == null ? null : num(r.words),
+        num(r.rated_at),
+        num(r.updated_at),
+        r.deleted ? 1 : 0,
         seq
       )
     );

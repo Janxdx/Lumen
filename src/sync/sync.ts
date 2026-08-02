@@ -30,8 +30,10 @@ import {
   type ProgressRecord,
 } from '../db';
 import type { Session } from '../engine/stats';
+import type { RatingRecord } from '../engine/rating';
 import { useLibrary } from '../store/library';
 import { useDevice } from '../store/device';
+import { useRatings } from '../store/ratings';
 import { useSettings } from '../store/settings';
 import { backend, humanError, syncEnabled } from './client';
 import { emptyChanges, isEmpty, type Changes, type Cursor } from './backend';
@@ -44,8 +46,10 @@ import {
   rowToBook,
   rowToBookmark,
   rowToDeviceBook,
+  ratingToRow,
   rowToDeviceSession,
   rowToProgress,
+  rowToRating,
   rowToSession,
   sessionToRow,
 } from './mapping';
@@ -188,6 +192,7 @@ export const useSync = create<SyncState>((set, get) => ({
 
         await useLibrary.getState().load();
         await useDevice.getState().load();
+        await useRatings.getState().load();
         /* a reader book that arrived from another device may match a book
            this one has imported since — link it before it is ever shown */
         await useDevice.getState().autoLink();
@@ -356,6 +361,23 @@ export async function merge(changes: Changes): Promise<void> {
     }
   }
 
+  /* Ratings merge on `updated_at` like any editable row. The only wrinkle
+     is that a rating arriving from another device may point at a book this
+     one has never imported — which is fine and stays that way: the row
+     carries its own title and author, so the shelf can draw the spine
+     without ever resolving the pointer. */
+  for (const row of changes.ratings) {
+    if (pending.has(`ratings:${row.id}`)) continue;
+    const local = await db.ratings.get(row.id);
+    if (row.deleted) {
+      if (local) await db.ratings.delete(row.id);
+      continue;
+    }
+    if (!local || local.updatedAt <= row.updated_at) {
+      await db.ratings.put(rowToRating(row) as RatingRecord);
+    }
+  }
+
   if (changes.settings) {
     const localAt = Number(localStorage.getItem(SETTINGS_AT) ?? 0);
     if (localAt <= changes.settings.updated_at) {
@@ -433,6 +455,10 @@ async function collect(userId: string, since: number): Promise<Changes> {
   }
   out.deviceSessions = touchedDeviceSessions.map((s) => deviceSessionToRow(s, userId));
 
+  out.ratings = (await db.ratings.toArray())
+    .filter((r) => r.updatedAt > since)
+    .map((r) => ratingToRow(r, userId));
+
   const settingsAt = Number(localStorage.getItem(SETTINGS_AT) ?? 0);
   if (settingsAt > since) {
     out.settings = { user_id: userId, data: settingsData(), updated_at: settingsAt };
@@ -499,6 +525,25 @@ async function collect(userId: string, since: number): Promise<Changes> {
           words: 0,
           mirror_uid: null,
           note: null,
+          updated_at: stone.at || now,
+          deleted: true,
+        });
+        break;
+      case 'ratings':
+        out.ratings.push({
+          user_id: userId,
+          id: stone.uid,
+          book_id: null,
+          device_book_id: null,
+          title: '',
+          author: '',
+          overall: 0,
+          axes: {},
+          mood: null,
+          note: null,
+          favourite: false,
+          words: null,
+          rated_at: stone.at,
           updated_at: stone.at || now,
           deleted: true,
         });

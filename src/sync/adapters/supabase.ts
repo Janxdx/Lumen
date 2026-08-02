@@ -28,6 +28,7 @@ import type {
   DeviceBookRow,
   DeviceSessionRow,
   ProgressRow,
+  RatingRow,
   SessionRow,
   SettingsRow,
 } from '../mapping';
@@ -190,7 +191,7 @@ export const supabaseBackend: Backend = {
        `where user_id = me` — asking on top of that would be belt and
        braces. This is the guarantee the Worker adapter has to reproduce by
        hand, since SQLite offers nothing like it. */
-    const [books, progress, sessions, bookmarks, deviceBooks, deviceSessions, settings] =
+    const [books, progress, sessions, bookmarks, deviceBooks, deviceSessions, ratings, settings] =
       await Promise.all([
         c.from('books').select('*').gt('synced_at', since).order('synced_at'),
         c.from('progress').select('*').gt('synced_at', since),
@@ -198,10 +199,11 @@ export const supabaseBackend: Backend = {
         c.from('bookmarks').select('*').gt('synced_at', since),
         c.from('device_books').select('*').gt('synced_at', since),
         c.from('device_sessions').select('*').gt('synced_at', since),
+        c.from('ratings').select('*').gt('synced_at', since),
         c.from('settings').select('*').gt('synced_at', since).limit(1),
       ]);
 
-    for (const r of [books, progress, sessions, bookmarks, deviceBooks, deviceSessions, settings]) {
+    for (const r of [books, progress, sessions, bookmarks, deviceBooks, deviceSessions, ratings, settings]) {
       if (r.error) throw r.error;
     }
 
@@ -212,6 +214,7 @@ export const supabaseBackend: Backend = {
       bookmarks: (bookmarks.data ?? []) as BookmarkRow[],
       deviceBooks: (deviceBooks.data ?? []) as DeviceBookRow[],
       deviceSessions: (deviceSessions.data ?? []) as DeviceSessionRow[],
+      ratings: (ratings.data ?? []) as RatingRow[],
       settings: ((settings.data ?? [])[0] as SettingsRow | undefined) ?? null,
     };
 
@@ -222,6 +225,7 @@ export const supabaseBackend: Backend = {
     next = maxStamp(next, changes.bookmarks);
     next = maxStamp(next, changes.deviceBooks);
     next = maxStamp(next, changes.deviceSessions);
+    next = maxStamp(next, changes.ratings);
     if (changes.settings) next = maxStamp(next, [changes.settings]);
 
     return { cursor: next, changes };
@@ -251,6 +255,7 @@ export const supabaseBackend: Backend = {
     await upsert('bookmarks', changes.bookmarks, 'user_id,uid');
     await upsert('device_books', changes.deviceBooks);
     await upsert('device_sessions', changes.deviceSessions, 'user_id,uid');
+    await upsert('ratings', changes.ratings);
     if (changes.settings) await upsert('settings', [changes.settings]);
 
     /* Supabase stamps rows with its own clock, so a push has no cursor to

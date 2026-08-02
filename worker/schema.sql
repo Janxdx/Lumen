@@ -268,6 +268,35 @@ create table if not exists bookmarks (
 
 create index if not exists bookmarks_seq_idx on bookmarks (user_id, row_seq);
 
+-- ── ratings ────────────────────────────────────────────────────────
+--  Not a column on `books`, for two reasons that both come down to the
+--  same thing: a verdict is not a property of a file. It survives the EPUB
+--  being deleted to free space, and it can be about a book only ever read
+--  on a physical e-reader. So both pointers are nullable, both may be null
+--  at once, and the title travels with the row.
+create table if not exists ratings (
+  user_id        text    not null references users(id) on delete cascade,
+  id             text    not null,
+  book_id        text,
+  device_book_id text,
+  title          text    not null default '',
+  author         text    not null default '',
+  overall        real    not null default 0,
+  axes           text    not null default '{}',   -- json, as everywhere here
+  mood           text,
+  note           text,
+  favourite      integer not null default 0,
+  words          integer,
+  rated_at       integer not null default 0,
+  updated_at     integer not null default 0,
+  deleted        integer not null default 0,
+  row_seq        integer not null default 0,
+  primary key (user_id, id)
+);
+
+create index if not exists ratings_seq_idx on ratings (user_id, row_seq);
+create index if not exists ratings_book_idx on ratings (user_id, book_id);
+
 -- ── settings ───────────────────────────────────────────────────────
 create table if not exists settings (
   user_id    text    primary key references users(id) on delete cascade,

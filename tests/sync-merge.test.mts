@@ -202,6 +202,73 @@ await db.covers.put({ bookId: 'bk3', blob: new Blob([bytes], { type: 'image/jpeg
 const legacy = await db.covers.get('bk3');
 check('legacy blob rows still render', coverToBlob(legacy!).type === 'image/jpeg');
 
+/* ── 3b ─ ratings merge, and outlive the books they describe ─────── */
+
+const ratingRow = {
+  user_id: 'u1',
+  id: 'rt1',
+  book_id: 'bk-rated',
+  device_book_id: null,
+  title: 'From the server',
+  author: 'A',
+  overall: 8,
+  axes: { prose: 9 },
+  mood: 'indigo',
+  note: null,
+  favourite: false,
+  words: 90000,
+  rated_at: 10,
+  updated_at: 500,
+  deleted: false,
+};
+
+await merge({ ...emptyChanges(), ratings: [ratingRow] });
+check('a rating arrives from the server', (await db.ratings.get('rt1'))?.overall === 8);
+
+await merge({ ...emptyChanges(), ratings: [{ ...ratingRow, overall: 4, updated_at: 100 }] });
+check(
+  'an older rating loses to the local copy',
+  (await db.ratings.get('rt1'))?.overall === 8
+);
+
+await merge({ ...emptyChanges(), ratings: [{ ...ratingRow, overall: 9.5, updated_at: 900 }] });
+check('a newer rating wins', (await db.ratings.get('rt1'))?.overall === 9.5);
+
+/* An axis nobody judged must stay absent through the round trip. Arriving
+   as 0 instead would tell the taste profile this reader hates characters. */
+check(
+  'an unjudged axis survives as absent, not zero',
+  (await db.ratings.get('rt1'))?.axes.characters === undefined
+);
+
+// deleting the book keeps the verdict and drops only the pointer
+await db.books.put({
+  id: 'bk-rated',
+  meta: { title: 'Rated', author: 'A', subjects: [] },
+  spine: [],
+  toc: [],
+  totalWords: 10,
+  addedAt: 1,
+  hue: 1,
+  updatedAt: 1,
+} as any);
+await deleteBook('bk-rated');
+const orphan = await db.ratings.get('rt1');
+check('deleting a book keeps the rating', orphan?.title === 'From the server');
+check('but unlinks it from the book that is gone', orphan?.bookId === undefined);
+
+// and a local deletion is not undone by the pull that follows it
+const { deleteRating } = await import(`${ROOT}/db/index.ts`);
+await deleteRating('rt1');
+check('deleting a rating writes a tombstone', !!(await db.tombstones.get('ratings:rt1')));
+await merge({ ...emptyChanges(), ratings: [{ ...ratingRow, updated_at: 99999 }] });
+check('a deleted rating is not resurrected', !(await db.ratings.get('rt1')));
+await db.tombstones.delete('ratings:rt1');
+
+await merge({ ...emptyChanges(), ratings: [{ ...ratingRow, updated_at: 99999 }] });
+await merge({ ...emptyChanges(), ratings: [{ ...ratingRow, updated_at: 99999, deleted: true }] });
+check('a server deletion removes the rating', !(await db.ratings.get('rt1')));
+
 /* ── 4 ─ the sync store starts clean ─────────────────────────────── */
 
 check('sync starts idle', useSync.getState().status === 'idle');
