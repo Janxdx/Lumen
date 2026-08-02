@@ -140,22 +140,20 @@ Open `wrangler.jsonc` and change these two lines:
 including `https://`, and no trailing slash. Passkeys are bound to this
 hostname. If sign-in works but passkeys mysteriously don't, this is why.
 
-### B4. Create the real database tables
-
-The database in Part A was a local copy on your Mac. The deployed one is
-empty:
-
-```sh
-npm run db:remote
-```
-
-### B5. Deploy
+### B4. Deploy
 
 ```sh
 npm run deploy
 ```
 
-### B6. Attach the domain
+The database in Part A was a local copy on your Mac; the deployed one starts
+empty. You don't need a separate step to fill it — `npm run deploy` applies
+`worker/schema.sql` to the remote database first (it's the `predeploy` script
+in `package.json`, and it's idempotent, so this happens on every deploy
+without doing any harm). A future release that adds a table shows up in prod
+the moment you deploy it, no extra command to remember.
+
+### B5. Attach the domain
 
 Cloudflare dashboard → Workers & Pages → **lumen** → Settings → Domains &
 Routes → **Add** → Custom Domain → enter `lumen.yourdomain.com`.
@@ -177,16 +175,3 @@ Add a passkey on your iPad, and from then on it's Face ID.
 | "That link has already been used" | Links work once. Ask for a new one. |
 | Signed in, then instantly signed out | You're on `http://` with a domain other than localhost. Cookies need https. |
 | Books sync but covers don't | R2 wasn't created — see step A3. |
-
-## Going back to Supabase
-
-Nothing was deleted. Create `.env.local` with:
-
-```sh
-VITE_BACKEND=supabase
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
-```
-
-The two backends hold separate data — switching points the same local
-library at a different server, it does not copy anything across.

@@ -18,6 +18,7 @@ introduced.
   of date" instead of hiding it behind "Something went wrong."
 - `6adad35` (merged as `286f00a`) — **find your place by scanning a page**.
 - **rate limiting across the whole API** (below).
+- **Supabase removed; D1 schema now deploys itself** (below).
 
 ## Rate limiting
 
@@ -46,10 +47,27 @@ Seven bindings, namespaces 1001–1007; the table and the reasoning are in
 older `wrangler.jsonc` degrades to today's behaviour instead of refusing
 every request. No schema change, so `npm run db:local` is not needed.
 
-Not covered, by decision: the Supabase adapter talks to Postgres directly
-with no Worker in between, so none of this applies there. And there is no
-client-side backoff — the ceilings are sized so legitimate traffic never
-meets them, rather than relying on the client to behave.
+Not covered, by decision: there is no client-side backoff — the ceilings are
+sized so legitimate traffic never meets them, rather than relying on the
+client to behave.
+
+## Supabase removed; D1 schema now deploys itself
+
+Jan works solo and only ever runs against Cloudflare, so the Supabase
+adapter (`src/sync/adapters/supabase.ts`), the `supabase/` folder, and
+`@supabase/supabase-js` are gone. `src/sync/backend.ts` stays as the seam —
+a future adapter is a new file behind it, not a rewrite — but `Backend.kind`
+is now just `'lumen'` and `src/sync/client.ts` only chooses between the
+Worker and `VITE_BACKEND=none`.
+
+The `ratings` table going missing in prod (2026-08-02) was the reminder that
+`worker/schema.sql` was never applied automatically — `npm run db:remote`
+had to be run by hand after every schema-adding release, and it wasn't.
+Fixed by adding `predeploy: npm run db:remote` to `package.json`: npm runs
+`pre<script>` hooks automatically ahead of the matching script, so
+`npm run deploy` now applies the (idempotent, `create table if not exists`)
+schema to remote D1 before `wrangler deploy` runs. A future table can't go
+missing in prod the same way again.
 
 ## Find your place (the scan feature)
 

@@ -109,8 +109,14 @@ Put the `database_id` into `wrangler.jsonc` where it says
 
 ```sh
 npm run db:local     # for wrangler dev
-npm run db:remote    # for the deployed Worker
 ```
+
+The remote database doesn't need this step by hand: `npm run deploy` applies
+`worker/schema.sql` to it automatically first (the `predeploy` script), and
+`worker/schema.sql` is idempotent, so every future deploy re-applies safely
+and a new table never goes missing in prod. Run `npm run db:remote` yourself
+only if you want the tables created before the first deploy, or want to push
+a schema change without deploying.
 
 ### 3. Point it at your domain
 
@@ -159,24 +165,16 @@ Once the domain resolves, add a Custom Domain route to the Worker, then set
 registered against the old hostname and will need to be added again; magic
 links keep working throughout.
 
-## Switching between backends
+## Turning sync off
 
-Both adapters are still in the tree, behind `src/sync/backend.ts`:
+The Worker is the only backend now — the Supabase adapter was removed once
+the migration was verified. `src/sync/backend.ts` is still the seam, so a
+future adapter is a new file behind it rather than a rewrite.
 
 ```sh
-VITE_BACKEND=lumen      # the Worker
-VITE_BACKEND=supabase   # the old hosted backend
-VITE_BACKEND=none       # local only, no account screen, no network
+VITE_BACKEND=lumen   # the Worker (default; also what unset means)
+VITE_BACKEND=none    # local only, no account screen, no network
 ```
-
-Unset means: Supabase if its env vars are present, otherwise the Worker.
-Nothing above the adapter layer knows which is running, so this is a genuine
-switch and not a one-way door — worth keeping until you have read a book
-end to end through the new one.
-
-Note that the two backends hold **separate** data. Switching does not
-migrate anything; it points the same local library at a different server,
-and the first sync uploads what this device has.
 
 ## Verifying it works
 

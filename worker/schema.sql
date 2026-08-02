@@ -1,23 +1,24 @@
 -- ═══════════════════════════════════════════════════════════════════
 --  Lumen — D1 schema
 --
---  Apply with:
---    npx wrangler d1 execute lumen --local --file worker/schema.sql
---    npx wrangler d1 execute lumen --remote --file worker/schema.sql
+--  Applied automatically: `npm run deploy` runs this against the remote
+--  database first (the `predeploy` script in package.json calls
+--  `npm run db:remote`), so a table added here is live in prod the moment
+--  the deploy finishes — no separate step to remember. For local
+--  development against `wrangler dev`, run `npm run db:local` yourself once.
 --
 --  Safe to re-run: every statement is idempotent.
 --
---  This is the SQLite counterpart of supabase/schema.sql. The tables are
---  deliberately the same shape, because the client maps rows to the same
---  Dexie records either way — but two things are fundamentally different
---  and both are called out where they appear:
+--  Two things worth knowing about this shape, both called out again where
+--  they appear:
 --
---    1. There is no row level security. Postgres could be told "a caller
---       may only ever see rows whose user_id matches their token", and it
---       would enforce that beneath any bug in the app. SQLite cannot. Every
---       statement in worker/data.ts therefore carries its own `where
---       user_id = ?`, and that discipline is the only thing standing
---       between one reader's library and another's.
+--    1. There is no row level security. A database that speaks SQL over
+--       HTTP could be told "a caller may only ever see rows whose user_id
+--       matches their token", and enforce that beneath any bug in the app.
+--       D1 has nothing equivalent. Every statement in worker/data.ts
+--       therefore carries its own `where user_id = ?`, and that discipline
+--       is the only thing standing between one reader's library and
+--       another's.
 --
 --    2. The sync cursor is a per-user counter, not a clock. See below.
 -- ═══════════════════════════════════════════════════════════════════
@@ -139,11 +140,6 @@ create table if not exists rate_limits (
 
 -- ═══════════════════════════════════════════════════════════════════
 --  Reading data
---
---  From here down the tables mirror supabase/schema.sql one for one. The
---  differences are mechanical: `jsonb` becomes `text` holding JSON, `real`
---  and `bigint` both become the SQLite numeric types, and `synced_at`
---  becomes `row_seq` against the per-user counter above.
 -- ═══════════════════════════════════════════════════════════════════
 
 -- ── books ──────────────────────────────────────────────────────────
