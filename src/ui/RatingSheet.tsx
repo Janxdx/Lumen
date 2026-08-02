@@ -27,7 +27,10 @@ import {
   type MoodKey,
   type RatingRecord,
 } from '../engine/rating';
-import { useRatings, type Rateable } from '../store/ratings';
+import { useRatings, statsFor, type BookProgressStats, type Rateable } from '../store/ratings';
+import { useLibrary } from '../store/library';
+import { useDevice } from '../store/device';
+import { formatCount, formatDuration, relativeDate } from '../engine/stats';
 
 interface Props {
   open: boolean;
@@ -70,6 +73,17 @@ export function RatingSheet({ open, subject, existing, dark, onClose }: Props) {
 
   const title = existing?.title ?? subject?.title ?? '';
   const author = existing?.author ?? subject?.author ?? '';
+
+  /* `statsFor` reaches into the library and device stores imperatively, the
+     same way `rateableBooks()` does — so subscribe to the slices it reads
+     purely to make this component re-render when they change. */
+  useLibrary((s) => s.sessions);
+  useLibrary((s) => s.progress);
+  useDevice((s) => s.books);
+
+  const bookId = existing?.bookId ?? subject?.bookId;
+  const deviceBookId = existing?.deviceBookId ?? subject?.deviceBookId;
+  const progress = useMemo(() => statsFor(bookId, deviceBookId), [bookId, deviceBookId]);
 
   const patch = (p: Partial<Draft>) => setDraft((d) => ({ ...d, ...p }));
 
@@ -123,6 +137,8 @@ export function RatingSheet({ open, subject, existing, dark, onClose }: Props) {
             </p>
           )}
         </header>
+
+        <BookProgress stats={progress} />
 
         <ScoreDial value={draft.overall} onChange={(overall) => patch({ overall })} />
 
@@ -208,6 +224,70 @@ export function RatingSheet({ open, subject, existing, dark, onClose }: Props) {
         </div>
       </div>
     </Sheet>
+  );
+}
+
+/* ── what's actually true about the reading, right now ──────────── */
+
+/* The rating itself is one verdict, formed once. This is the opposite: a
+   read-only strip of whatever the library or device shelf currently knows
+   about the book, computed fresh every time the sheet opens — started when,
+   how far in, how long it took, at what pace. Skipped entirely when the
+   book is gone or was rated from memory, rather than showing a row of
+   zeroes that would read as "you never touched this". */
+function BookProgress({ stats }: { stats: BookProgressStats }) {
+  if (!stats.present || (stats.sessions === 0 && !stats.finished)) return null;
+
+  const cards: { k: string; v: string; sub?: string }[] = [];
+
+  if (stats.startedAt) {
+    cards.push({ k: 'Started', v: relativeDate(stats.startedAt) });
+  }
+
+  if (stats.finished && stats.finishedAt) {
+    cards.push({
+      k: 'Finished',
+      v: relativeDate(stats.finishedAt),
+      sub: stats.startedAt ? `took ${formatDuration(stats.finishedAt - stats.startedAt, true)}` : undefined,
+    });
+  } else {
+    cards.push({
+      k: 'Progress',
+      v: `${Math.round(stats.percent * 100)}%`,
+      sub: 'still going',
+    });
+  }
+
+  if (stats.ms > 0) {
+    cards.push({
+      k: 'Time reading',
+      v: formatDuration(stats.ms, true),
+      sub: `${stats.sessions} ${stats.sessions === 1 ? 'session' : 'sessions'} · ${stats.daysRead} ${stats.daysRead === 1 ? 'day' : 'days'}`,
+    });
+  }
+
+  if (stats.avgWpm > 0) {
+    cards.push({ k: 'Pace', v: `${stats.avgWpm}`, sub: 'words per minute' });
+  }
+
+  if (stats.words > 0) {
+    cards.push({ k: 'Words read', v: formatCount(stats.words) });
+  }
+
+  if (!cards.length) return null;
+
+  return (
+    <div className="stat-grid" style={{ marginTop: 4, marginBottom: 'var(--s6)' }}>
+      {cards.map((c) => (
+        <div className="card" key={c.k}>
+          <div className="k">{c.k}</div>
+          <div className="v num" style={{ fontSize: 20 }}>
+            {c.v}
+          </div>
+          {c.sub && <div className="sub">{c.sub}</div>}
+        </div>
+      ))}
+    </div>
   );
 }
 

@@ -196,6 +196,14 @@ body::after {
 /* five tabs don't fit a phone at full width, so away from the iPad only the
    selected one keeps its label — the icons carry the rest */
 @media (max-width: 760px) {
+  /* On a phone `--safe-b` already clears the home indicator by itself —
+     stacking the full `--s5` gap from the iPad layout on top of that pushes
+     the bar noticeably higher than it needs to sit, into where a sheet's own
+     bottom controls live. A smaller gap here still keeps it clear of the
+     indicator without floating so far up the screen. */
+  .tabbar {
+    bottom: calc(var(--safe-b) + var(--s2));
+  }
   .tabbar button {
     padding: 0 var(--s3);
   }

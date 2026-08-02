@@ -30,6 +30,7 @@ import {
   percentToPage,
   remaining,
   wordsPerPage,
+  type Locus,
 } from '../engine/device';
 import type { BookRecord, DeviceBookRecord } from '../db';
 
@@ -315,8 +316,8 @@ export function Device() {
         sessions={timerBook ? byBook[timerBook.id] ?? [] : []}
         totalWords={library.find((b) => b.id === timerBook?.bookId)?.totalWords}
         onClose={() => setFinishing(false)}
-        onFinish={async (page, note) => {
-          await finish(page, note);
+        onFinish={async (page, note, toLocus) => {
+          await finish(page, note, toLocus);
           setFinishing(false);
         }}
       />
@@ -565,11 +566,19 @@ function FinishSheet({
   sessions: { ms: number; pages: number; start: number }[];
   totalWords?: number;
   onClose: () => void;
-  onFinish: (toPage: number, note?: string) => Promise<void>;
+  onFinish: (toPage: number, note?: string, toLocus?: Locus) => Promise<void>;
 }) {
   const [toPage, setToPage] = useState('');
   const [note, setNote] = useState('');
-  const [scanning, setScanning] = useState(false);
+  const [locus, setLocus] = useState<Locus | null>(null);
+  /* Scanning needs the book's own words, so it is offered only when the
+     EPUB is on this device — everywhere else the page number is the only
+     bridge there is, and asking for it plainly beats a shortcut that turns
+     out not to work. Where it is offered, it's the default: a scan reads
+     the exact spot, which is what the page number was always standing in
+     for. `manual` is the fallback, reached either automatically (no scan
+     possible) or by hand ("enter the page instead"). */
+  const [manual, setManual] = useState(false);
 
   /* Prefill with what your own pace says you probably reached. It is a
      guess and is labelled as one, but it is a far better starting point
@@ -582,39 +591,37 @@ function FinishSheet({
     return Math.min(book.pages, Math.round(fromPage + (ms / 3_600_000) * rate));
   }, [book, sessions, fromPage, ms]);
 
+  const canScan = !!book && !!linkedBook && !linkedBook.fileMissing;
+
   useEffect(() => {
     if (open) {
       setToPage(guess ? String(guess) : '');
       setNote('');
-      setScanning(false);
+      setLocus(null);
+      setManual(!canScan);
     }
-  }, [open, guess]);
+  }, [open, guess, canScan]);
 
   if (!book) return null;
 
-  /* Scanning needs the book's own words, so it is offered only when the
-     EPUB is on this device. Everywhere else the page number is the only
-     bridge there is, and asking for it plainly is better than offering a
-     shortcut that turns out not to work. */
-  const canScan = !!linkedBook && !linkedBook.fileMissing;
-
-  if (scanning && linkedBook) {
+  if (canScan && !manual) {
     return (
       <Sheet open={open} onClose={onClose}>
         <ScanPanel
           open
-          onClose={() => setScanning(false)}
-          bookId={linkedBook.id}
-          spine={linkedBook.spine}
+          onClose={() => setManual(true)}
+          bookId={linkedBook!.id}
+          spine={linkedBook!.spine}
           title={book.title}
-          action="Use as the page I stopped on"
-          cancelLabel="Back"
-          describe={(locus) =>
-            `page ${percentToPage(book, locus.percent)} · ${Math.round(locus.percent * 100)}% through`
+          action="That's where I stopped"
+          cancelLabel="Enter the page number instead"
+          describe={(l) =>
+            `page ${percentToPage(book, l.percent)} · ${Math.round(l.percent * 100)}% through`
           }
-          onLocated={(locus) => {
-            setToPage(String(percentToPage(book, locus.percent)));
-            setScanning(false);
+          onLocated={(l) => {
+            setLocus(l);
+            setToPage(String(percentToPage(book, l.percent)));
+            setManual(true);
           }}
         />
       </Sheet>
@@ -640,12 +647,19 @@ function FinishSheet({
             inputMode="numeric"
             autoFocus
             value={toPage}
-            onChange={(e) => setToPage(e.currentTarget.value.replace(/\D/g, ''))}
+            onChange={(e) => {
+              // typing over a scanned page invalidates the exact position
+              // it came with — the number is no longer standing in for it
+              setLocus(null);
+              setToPage(e.currentTarget.value.replace(/\D/g, ''));
+            }}
             placeholder={String(fromPage)}
             hint={
-              guess
-                ? `You'd read to page ${fromPage}. Your recent pace suggests about ${guess}.`
-                : `You'd read to page ${fromPage} before this session.`
+              locus
+                ? `Matched by scan · ${Math.round(locus.percent * 100)}% through the book`
+                : guess
+                  ? `You'd read to page ${fromPage}. Your recent pace suggests about ${guess}.`
+                  : `You'd read to page ${fromPage} before this session.`
             }
           />
 
@@ -653,9 +667,9 @@ function FinishSheet({
             <button
               className="btn ghost"
               style={{ justifyContent: 'center' }}
-              onClick={() => setScanning(true)}
+              onClick={() => setManual(false)}
             >
-              <IconImage size={15} /> Don't know the page? Scan it
+              <IconImage size={15} /> {locus ? 'Scan again' : 'Scan the page instead'}
             </button>
           )}
 
@@ -687,7 +701,7 @@ function FinishSheet({
           className="auth-submit"
           style={{ marginTop: 18 }}
           disabled={to < fromPage}
-          onClick={() => void onFinish(to || fromPage, note)}
+          onClick={() => void onFinish(to || fromPage, note, locus ?? undefined)}
         >
           <IconCheck size={16} /> Save session
         </button>
@@ -741,6 +755,7 @@ function BookDetail({
     ms: number;
     fromPage: number;
     toPage: number;
+    toLocus?: Locus;
     note?: string;
   }) => void;
   onRemoveSession: (id: number) => void;
@@ -776,7 +791,7 @@ function BookDetail({
           `page ${percentToPage(book, locus.percent)} of ${book.pages} · ${Math.round(locus.percent * 100)}%`
         }
         onLocated={(locus) => {
-          onUpdate({ currentPage: percentToPage(book, locus.percent) });
+          onUpdate({ currentPage: percentToPage(book, locus.percent), currentLocus: locus });
           setScanning(false);
         }}
       />
@@ -902,6 +917,7 @@ function BookDetail({
       {logging && (
         <ManualForm
           book={book}
+          linkedBook={linkedBook}
           onCancel={() => setLogging(false)}
           onSubmit={(input) => {
             onLog(input);
@@ -989,16 +1005,19 @@ function BookDetail({
 
 function ManualForm({
   book,
+  linkedBook,
   onCancel,
   onSubmit,
 }: {
   book: DeviceBookRecord;
+  linkedBook: BookRecord | null;
   onCancel: () => void;
   onSubmit: (input: {
     start: number;
     ms: number;
     fromPage: number;
     toPage: number;
+    toLocus?: Locus;
     note?: string;
   }) => void;
 }) {
@@ -1006,8 +1025,35 @@ function ManualForm({
   const [minutes, setMinutes] = useState('30');
   const [from, setFrom] = useState(String(book.currentPage || book.startPage));
   const [to, setTo] = useState('');
+  const [locus, setLocus] = useState<Locus | null>(null);
+  const [scanning, setScanning] = useState(false);
 
+  const canScan = !!linkedBook && !linkedBook.fileMissing;
   const valid = Number(minutes) > 0 && Number(to) >= Number(from);
+
+  if (scanning && linkedBook) {
+    return (
+      <div className="panel" style={{ marginTop: 16 }}>
+        <ScanPanel
+          open
+          onClose={() => setScanning(false)}
+          bookId={linkedBook.id}
+          spine={linkedBook.spine}
+          title={book.title}
+          action="That's where I stopped"
+          cancelLabel="Type the page number instead"
+          describe={(l) =>
+            `page ${percentToPage(book, l.percent)} · ${Math.round(l.percent * 100)}% through`
+          }
+          onLocated={(l) => {
+            setLocus(l);
+            setTo(String(percentToPage(book, l.percent)));
+            setScanning(false);
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="panel" style={{ marginTop: 16 }}>
@@ -1038,9 +1084,22 @@ function ManualForm({
             label="To page"
             inputMode="numeric"
             value={to}
-            onChange={(e) => setTo(e.currentTarget.value.replace(/\D/g, ''))}
+            onChange={(e) => {
+              setLocus(null);
+              setTo(e.currentTarget.value.replace(/\D/g, ''));
+            }}
+            hint={locus ? `Matched by scan · ${Math.round(locus.percent * 100)}% through` : undefined}
           />
         </div>
+        {canScan && (
+          <button
+            className="btn ghost"
+            style={{ justifyContent: 'center' }}
+            onClick={() => setScanning(true)}
+          >
+            <IconImage size={15} /> {locus ? 'Scan again' : "Don't know the page? Scan it"}
+          </button>
+        )}
       </div>
       <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
         <button
@@ -1052,6 +1111,7 @@ function ManualForm({
               ms: Number(minutes) * 60_000,
               fromPage: Number(from),
               toPage: Number(to),
+              toLocus: locus ?? undefined,
             })
           }
         >

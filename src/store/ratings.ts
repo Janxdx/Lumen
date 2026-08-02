@@ -26,6 +26,7 @@ import {
   type MoodKey,
   type RatingRecord,
 } from '../engine/rating';
+import { totals, type Session } from '../engine/stats';
 import { useLibrary } from './library';
 import { useDevice } from './device';
 
@@ -209,4 +210,101 @@ export function rateableBooks(): Rateable[] {
   return out.sort(
     (a, b) => Number(b.finished) - Number(a.finished) || b.percent - a.percent
   );
+}
+
+/* ── what the shelves know about a book's *progress*, for the rating sheet ──
+ *
+ * A rating is written once (or occasionally revised), but the reading it is
+ * about keeps accumulating sessions the whole time the sheet can be open.
+ * Nothing here is stored on the rating record — it is read fresh from the
+ * library and device stores every time, the same way `rateableBooks()` is,
+ * so the numbers never have their own staleness to worry about.
+ */
+export interface BookProgressStats {
+  /** false once the book/device entry has been deleted — the rating survives, this doesn't */
+  present: boolean;
+  /** 0–1 */
+  percent: number;
+  finished: boolean;
+  /** first session ever logged, falling back to when the book was added */
+  startedAt: number | null;
+  finishedAt: number | null;
+  ms: number;
+  words: number;
+  sessions: number;
+  daysRead: number;
+  avgWpm: number;
+}
+
+const EMPTY_PROGRESS: BookProgressStats = {
+  present: false,
+  percent: 0,
+  finished: false,
+  startedAt: null,
+  finishedAt: null,
+  ms: 0,
+  words: 0,
+  sessions: 0,
+  daysRead: 0,
+  avgWpm: 0,
+};
+
+const fromSessions = (sessions: Session[], addedAt?: number): Pick<
+  BookProgressStats,
+  'startedAt' | 'ms' | 'words' | 'sessions' | 'daysRead' | 'avgWpm'
+> => {
+  const t = totals(sessions);
+  const first = sessions.length ? Math.min(...sessions.map((s) => s.start)) : null;
+  return {
+    startedAt: first ?? addedAt ?? null,
+    ms: t.ms,
+    words: t.words,
+    sessions: t.sessions,
+    daysRead: t.daysRead,
+    avgWpm: t.avgWpm,
+  };
+};
+
+/** Reading progress for whichever book a rating (or a candidate to be rated)
+    points at. Give it `bookId` for a library book, `deviceBookId` for a
+    reader-shelf one — a `Rateable` and a `RatingRecord` both carry exactly
+    one of the two, which is what this mirrors. */
+export function statsFor(bookId?: string, deviceBookId?: string): BookProgressStats {
+  const lib = useLibrary.getState();
+
+  if (bookId) {
+    const book = lib.books.find((b) => b.id === bookId);
+    if (!book) return EMPTY_PROGRESS;
+    const sessions = lib.sessions.filter((s) => s.bookId === bookId);
+    return {
+      present: true,
+      percent: lib.progress[bookId]?.percent ?? 0,
+      finished: Boolean(book.finishedAt),
+      finishedAt: book.finishedAt ?? null,
+      ...fromSessions(sessions, book.addedAt),
+    };
+  }
+
+  if (deviceBookId) {
+    const device = useDevice.getState();
+    const book = device.books.find((b) => b.id === deviceBookId);
+    if (!book) return EMPTY_PROGRESS;
+    /* A device book still waiting to be linked mirrors its sessions into the
+       library under this synthetic key — see `recomputeBook` in
+       `store/device.ts`. Once it *is* linked, its history lives under the
+       linked bookId instead, but `rateableBooks()` never hands out a
+       `deviceBookId` for a linked book, so that case doesn't reach here. */
+    const sessions = lib.sessions.filter((s) => s.bookId === `device:${deviceBookId}`);
+    const bodyPages = Math.max(1, book.pages - book.startPage + 1);
+    const percent = Math.min(1, Math.max(0, (book.currentPage - book.startPage + 1) / bodyPages));
+    return {
+      present: true,
+      percent,
+      finished: Boolean(book.finishedAt),
+      finishedAt: book.finishedAt ?? null,
+      ...fromSessions(sessions, book.addedAt),
+    };
+  }
+
+  return EMPTY_PROGRESS;
 }

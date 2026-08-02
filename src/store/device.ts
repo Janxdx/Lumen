@@ -23,10 +23,13 @@ import {
   type DeviceSessionRecord,
 } from '../db';
 import {
+  bodyPages,
   findMatch,
   pageToPercent,
   pagesToWords,
   percentToLocus,
+  percentToPage,
+  type Locus,
 } from '../engine/device';
 import type { Session } from '../engine/stats';
 import { useLibrary } from './library';
@@ -81,7 +84,9 @@ interface DeviceState {
   pause(): Promise<void>;
   resume(): Promise<void>;
   discard(): Promise<void>;
-  finish(toPage: number, note?: string): Promise<void>;
+  /** `toLocus`, when given, is an exact scan match — more precise than the
+      page number, which is then derived from it rather than typed */
+  finish(toPage: number, note?: string, toLocus?: Locus): Promise<void>;
 
   /** backfill a session you forgot to time */
   logManual(input: {
@@ -90,10 +95,16 @@ interface DeviceState {
     ms: number;
     fromPage: number;
     toPage: number;
+    toLocus?: Locus;
     note?: string;
   }): Promise<void>;
   removeSession(id: number): Promise<void>;
   clearReceipt(): void;
+
+  /** push the library's own reading position into any linked reader book,
+      forward-only — the other half of `recomputeBook`, which pushes the
+      other way. Called from the library store as you read in the app. */
+  pullFromLibrary(bookId: string, locus: Locus): Promise<void>;
 }
 
 export const useDevice = create<DeviceState>((set, get) => ({
@@ -239,7 +250,7 @@ export const useDevice = create<DeviceState>((set, get) => ({
     set({ timer: null });
   },
 
-  async finish(toPage, note) {
+  async finish(toPage, note, toLocus) {
     const t = get().timer;
     if (!t) return;
     const ms = elapsedOf(t);
@@ -251,18 +262,22 @@ export const useDevice = create<DeviceState>((set, get) => ({
       ms,
       fromPage: t.fromPage,
       toPage,
+      toLocus,
       note,
     });
   },
 
   /* ── recording ───────────────────────────────────────────────── */
 
-  async logManual({ deviceBookId, start, ms, fromPage, toPage, note }) {
+  async logManual({ deviceBookId, start, ms, fromPage, toPage, toLocus, note }) {
     const book = await db.deviceBooks.get(deviceBookId);
     if (!book) return;
 
     const from = Math.max(0, Math.round(fromPage));
-    const to = Math.min(book.pages, Math.max(from, Math.round(toPage)));
+    /* a scan match is the real stopping point; the typed page number is
+       only ever a fallback for it, so when both are present the locus wins */
+    const rawTo = toLocus ? percentToPage(book, toLocus.percent) : Math.round(toPage);
+    const to = Math.min(book.pages, Math.max(from, rawTo));
     const pages = to - from;
 
     const record: DeviceSessionRecord = {
@@ -277,6 +292,9 @@ export const useDevice = create<DeviceState>((set, get) => ({
       words: 0, // filled by the reconciler, which knows the linked book
       note: note?.trim() || undefined,
       updatedAt: Date.now(),
+      ...(toLocus
+        ? { toSpineIndex: toLocus.spineIndex, toWordIndex: toLocus.wordIndex, toPercent: toLocus.percent }
+        : {}),
     };
     await db.deviceSessions.add(record);
 
@@ -286,6 +304,7 @@ export const useDevice = create<DeviceState>((set, get) => ({
       await db.deviceBooks.update(deviceBookId, {
         currentPage: to,
         updatedAt: Date.now(),
+        ...(toLocus ? { currentLocus: toLocus } : {}),
         ...(to >= book.pages ? { finishedAt: Date.now() } : {}),
       });
     }
@@ -302,6 +321,31 @@ export const useDevice = create<DeviceState>((set, get) => ({
       },
     });
     changed();
+  },
+
+  async pullFromLibrary(bookId, locus) {
+    const linked = await db.deviceBooks.where('bookId').equals(bookId).toArray();
+    if (!linked.length) return;
+
+    let moved = false;
+    for (const book of linked) {
+      const target = percentToPage(book, locus.percent);
+      // forward-only, same rule as recomputeBook's device→library push —
+      // reading further in the app pulls the reader card along, never back
+      if (target > book.currentPage) {
+        await db.deviceBooks.update(book.id, {
+          currentPage: target,
+          currentLocus: locus,
+          updatedAt: Date.now(),
+          ...(target >= book.pages ? { finishedAt: Date.now() } : {}),
+        });
+        moved = true;
+      }
+    }
+    if (moved) {
+      await get().load();
+      changed();
+    }
   },
 
   async removeSession(id) {
@@ -407,7 +451,22 @@ export async function recomputeBook(deviceBookId: string): Promise<Receipt | nul
   /* 2 ─ position, forward only */
   if (!book.bookId || !linked) return null;
 
-  const percent = pageToPercent(book, book.currentPage);
+  const pageDerivedPercent = pageToPercent(book, book.currentPage);
+
+  /* `currentLocus` is an exact stamp — a scan match, or a position pulled
+     straight from the library — but it is only trusted while it still
+     agrees with `currentPage`. A page typed by hand afterwards, or a page
+     count correction, moves `currentPage` without touching the locus, and
+     from then on the two disagree by more than a page's worth: proof the
+     locus is stale, so falling back to the page-based estimate is what
+     keeps a mistyped page from landing on an old, now-wrong, exact spot. */
+  const tolerance = 1 / bodyPages(book) + 0.0005;
+  const trustedLocus =
+    book.currentLocus && Math.abs(book.currentLocus.percent - pageDerivedPercent) <= tolerance
+      ? book.currentLocus
+      : null;
+
+  const percent = trustedLocus?.percent ?? pageDerivedPercent;
   const current = await db.progress.get(book.bookId);
   const before = current?.percent ?? 0;
 
@@ -415,7 +474,7 @@ export async function recomputeBook(deviceBookId: string): Promise<Receipt | nul
     return { before, after: before, moved: false };
   }
 
-  const locus = percentToLocus(linked.spine, percent);
+  const locus = trustedLocus ?? percentToLocus(linked.spine, percent);
   await db.progress.put({
     bookId: book.bookId,
     spineIndex: locus.spineIndex,
