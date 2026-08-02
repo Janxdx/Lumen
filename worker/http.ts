@@ -114,6 +114,29 @@ export function requireSameOrigin(req: Request): void {
 /** Render a thrown error as a response, keeping internals out of the body. */
 export function toResponse(e: unknown): Response {
   if (e instanceof HttpError) return json({ error: e.message }, { status: e.status });
+
+  /* One 500 is worth naming rather than hiding: a database whose schema
+     predates a feature. SQLite says "no such table: ratings", which means
+     "schema.sql has gained a table since you last applied it" — and nothing
+     else in the app is in a position to work that out. Left generic it
+     surfaces as "Something went wrong." on the account screen the moment
+     you sign in, with the real sentence only in the Worker's own log.
+
+     Safe to disclose: a table name from our own schema tells an attacker
+     nothing they could not read in the repository. */
+  const message = e instanceof Error ? e.message : String(e);
+  if (/no such (table|column)/i.test(message)) {
+    console.error('schema out of date', e);
+    return json(
+      {
+        error:
+          `The database is missing part of its schema — ${message}. ` +
+          'Apply worker/schema.sql: `npm run db:local`, or `npm run db:remote` for the deployed database.',
+      },
+      { status: 500 }
+    );
+  }
+
   console.error('unhandled', e);
   return json({ error: 'Something went wrong.' }, { status: 500 });
 }
