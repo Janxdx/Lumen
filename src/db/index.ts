@@ -1,6 +1,7 @@
 import Dexie, { type Table } from 'dexie';
 import type { BookMeta, SpineEntry, TocEntry } from '../engine/types';
 import type { Session } from '../engine/stats';
+import type { RatingRecord } from '../engine/rating';
 
 export interface BookRecord {
   id: string;
@@ -133,7 +134,7 @@ export interface DeviceSessionRecord {
 export interface TombstoneRecord {
   /** `${table}:${uid}` */
   key: string;
-  table: 'books' | 'bookmarks' | 'device_books' | 'device_sessions';
+  table: 'books' | 'bookmarks' | 'device_books' | 'device_sessions' | 'ratings';
   uid: string;
   at: number;
 }
@@ -152,6 +153,7 @@ class LumenDB extends Dexie {
   tombstones!: Table<TombstoneRecord, string>;
   deviceBooks!: Table<DeviceBookRecord, string>;
   deviceSessions!: Table<DeviceSessionRecord, number>;
+  ratings!: Table<RatingRecord, string>;
 
   constructor() {
     super('lumen');
@@ -216,6 +218,26 @@ class LumenDB extends Dexie {
       deviceBooks: 'id, addedAt, updatedAt, bookId',
       deviceSessions: '++id, deviceBookId, start, &uid, updatedAt',
     });
+
+    /* v4 adds ratings. The primary key is client-generated rather than
+       auto-incremented, like books and device books, because a rating has
+       to be the same row on every device — and unlike bookmarks it does not
+       need a separate uid, since it never had a local numeric identity to
+       be stuck with. `bookId` and `deviceBookId` are indexed so the two
+       shelves can ask "is this one rated?" without a table scan per cover. */
+    this.version(4).stores({
+      books: 'id, addedAt, finishedAt, updatedAt',
+      files: 'bookId',
+      covers: 'bookId',
+      progress: 'bookId, updatedAt',
+      sessions: '++id, bookId, start, &uid',
+      bookmarks: '++id, bookId, createdAt, &uid, updatedAt',
+      settings: 'key',
+      tombstones: 'key, at',
+      deviceBooks: 'id, addedAt, updatedAt, bookId',
+      deviceSessions: '++id, deviceBookId, start, &uid, updatedAt',
+      ratings: 'id, bookId, deviceBookId, ratedAt, overall, updatedAt',
+    });
   }
 }
 
@@ -240,8 +262,20 @@ export async function estimateUsage(): Promise<{ used: number; quota: number }> 
 export async function deleteBook(bookId: string): Promise<void> {
   await db.transaction(
     'rw',
-    [db.books, db.files, db.covers, db.progress, db.bookmarks, db.tombstones],
+    [db.books, db.files, db.covers, db.progress, db.bookmarks, db.ratings, db.tombstones],
     async () => {
+      /* The rating stays. It carries its own title and author precisely so
+         that removing a 4 MB EPUB to free space does not also remove what
+         you thought of it — but the pointer has to go, or the shelf would
+         keep asking for a cover that isn't there. */
+      await db.ratings
+        .where('bookId')
+        .equals(bookId)
+        .modify((r) => {
+          delete r.bookId;
+          r.updatedAt = Date.now();
+        });
+
       const marks = await db.bookmarks.where('bookId').equals(bookId).toArray();
       const now = Date.now();
 
@@ -275,10 +309,19 @@ export async function deleteBook(bookId: string): Promise<void> {
 export async function deleteDeviceBook(id: string): Promise<void> {
   await db.transaction(
     'rw',
-    [db.deviceBooks, db.deviceSessions, db.sessions, db.tombstones],
+    [db.deviceBooks, db.deviceSessions, db.sessions, db.ratings, db.tombstones],
     async () => {
       const logged = await db.deviceSessions.where('deviceBookId').equals(id).toArray();
       const now = Date.now();
+
+      // as with the library: the verdict outlives the book it was about
+      await db.ratings
+        .where('deviceBookId')
+        .equals(id)
+        .modify((r) => {
+          delete r.deviceBookId;
+          r.updatedAt = now;
+        });
 
       // the mirrored library sessions go too, or the stats would double-count
       // reading that no longer has a book behind it
@@ -304,6 +347,19 @@ export async function deleteDeviceBook(id: string): Promise<void> {
       ]);
     }
   );
+}
+
+/** Remove a rating, leaving a tombstone so the deletion reaches the server. */
+export async function deleteRating(id: string): Promise<void> {
+  await db.transaction('rw', [db.ratings, db.tombstones], async () => {
+    await db.ratings.delete(id);
+    await db.tombstones.put({
+      key: `ratings:${id}`,
+      table: 'ratings',
+      uid: id,
+      at: Date.now(),
+    });
+  });
 }
 
 /** Free the local EPUB but keep the book in the library (it lives in the cloud). */

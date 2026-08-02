@@ -87,7 +87,7 @@ export const MOODS: Mood[] = [
   { key: 'ash', label: 'Cold', note: 'Admired from a distance', h: 30, s: 6, l: 42 },
 ];
 
-export const moodOf = (key: MoodKey | undefined): Mood | null =>
+export const moodOf = (key: MoodKey | null | undefined): Mood | null =>
   MOODS.find((m) => m.key === key) ?? null;
 
 /** The mood as a colour, lifted on the dark theme so it still reads as cloth. */
