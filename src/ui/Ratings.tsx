@@ -9,6 +9,7 @@
 import { useMemo, useState } from 'react';
 import { MoodRibbon, Radar, ScoreCurve } from './Charts';
 import { SpineWall } from './SpineWall';
+import { TasteCard } from './TasteCard';
 import { RatingSheet } from './RatingSheet';
 import { Sheet } from './Sheet';
 import { IconPencil, IconPlus, IconStar } from './Icons';
@@ -186,6 +187,8 @@ export function Ratings() {
                 ))}
               </div>
             </div>
+
+            <TasteCard ratings={ratings} />
 
             {profile.best && (
               <div className="panel">

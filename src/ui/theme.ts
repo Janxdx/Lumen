@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { resolveTheme, useSettings } from '../store/settings';
+import type { CardPalette } from '../engine/tasteCard';
 
 /**
  * Whether the dark theme is currently showing.
@@ -28,4 +29,31 @@ export function useDarkTheme(): boolean {
   }, [mode]);
 
   return dark;
+}
+
+/**
+ * The current theme's colours as literal values.
+ *
+ * The taste card is rasterised into a canvas, which has no stylesheet, so
+ * every colour in it must be a literal rather than a `var(--ink)`. Reading
+ * them off the live document rather than keeping a copy is what stops the
+ * exported image from slowly drifting away from the themes as they are
+ * tuned — there is only ever one definition, in tokens.css.
+ */
+export function readPalette(): CardPalette {
+  const s = getComputedStyle(document.documentElement);
+  const get = (name: string, fallback: string): string =>
+    s.getPropertyValue(name).trim() || fallback;
+  return {
+    bg: get('--bg', '#FAF7F2'),
+    surface: get('--surface', '#FFFFFF'),
+    ink: get('--ink', '#1A1714'),
+    ink2: get('--ink-2', '#514840'),
+    ink3: get('--ink-3', '#8C8074'),
+    /* `--line` is an rgba() with alpha, which SVG handles but which reads
+       as almost nothing on the card's flat ground — so the hairlines get a
+       solid stand-in rather than the UI's near-invisible rule. */
+    line: get('--line-strong', 'rgba(26,23,20,0.16)'),
+    accent: get('--accent', '#B4763A'),
+  };
 }

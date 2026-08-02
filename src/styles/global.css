@@ -1942,6 +1942,36 @@ input[type='range']::-moz-range-thumb {
   border-radius: 2px;
 }
 
+/* ── the taste card ───────────────────────────────────────────── */
+
+.taste-layout {
+  display: grid;
+  gap: var(--s5);
+  grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+  align-items: start;
+}
+@media (max-width: 620px) {
+  .taste-layout {
+    grid-template-columns: 1fr;
+  }
+}
+.taste-card svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-1);
+}
+.taste-side {
+  display: flex;
+  flex-direction: column;
+}
+.taste-side .btn[disabled] {
+  opacity: 0.6;
+  cursor: default;
+}
+
 /* ── the mood mix, as one ribbon of cloth ─────────────────────── */
 .mood-ribbon {
   display: flex;
