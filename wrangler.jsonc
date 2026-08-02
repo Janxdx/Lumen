@@ -136,18 +136,39 @@
 				"period": 60
 			}
 		},
+		// ── files, which are the awkward case ────────────────────────
+		//
+		// R2 rather than D1, but the same kind of damage. What makes them
+		// awkward is that the client walks whole libraries in sequential
+		// loops with nothing pacing them: downloadAll() fetches every book,
+		// and syncFiles() uploads every unsynced one and then fetches every
+		// missing cover. Those are legitimate and they are bursts, and their
+		// length is however many books somebody owns. So the file paths skip
+		// the general burst ceiling — 60 in 10 seconds is nothing for a
+		// multi-megabyte EPUB but easy for a run of small covers — and are
+		// held by these instead, with RL_ADDRESS still above them.
 		{
-			// Files, in R2 rather than D1, but the same kind of damage: a
-			// PUT loop full of EPUBs costs storage and class-A operations.
-			// The headroom is large because the first sync of an existing
-			// library is a legitimate burst — syncFiles() walks every book
-			// back to back, two objects each, with nothing pacing it. At 240
-			// a minute that is a hundred and twenty books, which is a bigger
-			// shelf than this limit will ever meet.
-			"name": "RL_FILES",
+			// Downloads. Generous, because a first sync on a new iPad is one
+			// long sequential read of an entire shelf, and because a caller
+			// abusing this is authenticated and spending their own bandwidth
+			// on files they already have every right to fetch.
+			"name": "RL_FILES_READ",
 			"namespace_id": "1006",
 			"simple": {
-				"limit": 240,
+				"limit": 600,
+				"period": 60
+			}
+		},
+		{
+			// Uploads and deletes. Tighter, because this is the direction
+			// that costs storage and class-A operations, and because it is
+			// paced by the network in a way reads are not — 120 a minute is
+			// sixty books, and a book is megabytes. Well above any real
+			// import, well below anything worth doing on purpose.
+			"name": "RL_FILES_WRITE",
+			"namespace_id": "1007",
+			"simple": {
+				"limit": 120,
 				"period": 60
 			}
 		}

@@ -12,12 +12,44 @@ introduced.
 
 # Current state (2026-08-02)
 
-`develop` is at `286f00a`, two commits and one merge ahead of `main`
-(`3537cca`):
+`develop` is ahead of `main` (`3537cca`) by:
 
 - `82331f8` — the Worker names the one 500 that means "your D1 schema is out
   of date" instead of hiding it behind "Something went wrong."
 - `6adad35` (merged as `286f00a`) — **find your place by scanning a page**.
+- **rate limiting across the whole API** (below).
+
+## Rate limiting
+
+`worker/limit.ts` gates every `/api` and `/auth` request ahead of the router,
+so ahead of the session lookup — a rejected request costs no query. Counters
+are Cloudflare rate limiting bindings in `wrangler.jsonc` (edge-local, free,
+10s or 60s windows only, per-location), never D1: a limiter storing counters
+in the database it protects adds queries to every request it inspects.
+
+Seven bindings, namespaces 1001–1007; the table and the reasoning are in
+`worker/README.md`. Three points worth not re-deriving:
+
+- Signed-in traffic is keyed by a hash of the session cookie, **unverified**
+  — verifying costs the query the gate exists to avoid. A forged cookie
+  therefore buys a private budget, and `RL_ADDRESS` (keyed by IP, applied to
+  everything) is what makes that worthless. Neither wall works alone.
+- **File endpoints deliberately skip the burst wall.** `downloadAll()` and
+  the two loops in `syncFiles()` walk whole libraries with nothing pacing
+  them, so a legitimate burst is as long as somebody's shelf. Verified live:
+  90 consecutive file GETs pass, while `/api/pull` cuts off at exactly 60.
+- The magic-link limit **stays in D1** (`rate_limits` table, `auth.ts`). It
+  needs a 15-minute window and one global count, because it rations mail
+  into someone's inbox rather than load arriving here.
+
+`gate()` fails open with a `console.warn` if a binding is missing, so an
+older `wrangler.jsonc` degrades to today's behaviour instead of refusing
+every request. No schema change, so `npm run db:local` is not needed.
+
+Not covered, by decision: the Supabase adapter talks to Postgres directly
+with no Worker in between, so none of this applies there. And there is no
+client-side backoff — the ceilings are sized so legitimate traffic never
+meets them, rather than relying on the client to behave.
 
 ## Find your place (the scan feature)
 
@@ -60,8 +92,9 @@ automatically.
 # Environment notes
 
 Always run `git fetch origin` before assuming local state is current —
-`main` can move if PRs get merged on GitHub directly. There is no
-`origin/develop`; `develop` is local only.
+`main` can move if PRs get merged on GitHub directly. `origin/develop` now
+exists — it was pushed on 2026-08-02 — so `develop` is no longer local only
+and can also move underneath you.
 
 The sandbox mount cannot unlink files by default, which leaves git unable to
 clean up its own `.git/*.lock` files and wedges the repo mid-operation. If a

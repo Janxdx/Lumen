@@ -28,8 +28,10 @@ export interface Env {
   RL_WRITE?: RateLimit;
   /** the signed-out surface: passkeys, magic links */
   RL_AUTH?: RateLimit;
-  /** EPUB and cover traffic against R2 */
-  RL_FILES?: RateLimit;
+  /** EPUB and cover downloads from R2 — sized for syncing a whole library */
+  RL_FILES_READ?: RateLimit;
+  /** EPUB and cover uploads and deletes, the direction that costs storage */
+  RL_FILES_WRITE?: RateLimit;
 
   /* ── vars ──────────────────────────────────────────────────────── */
 

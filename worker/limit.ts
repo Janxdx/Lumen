@@ -98,11 +98,14 @@ async function check(binding: RateLimit | undefined, name: string, key: string):
 }
 
 /* Which ceiling applies to what. Everything under /api and /auth passes the
-   two walls; the third depends on what the endpoint would go on to do. */
-type Cost = 'read' | 'write' | 'auth' | 'files';
+   address wall; most also pass the burst wall; the last depends on what the
+   endpoint would go on to do. */
+type Cost = 'read' | 'write' | 'auth' | 'fileRead' | 'fileWrite';
 
 function costOf(method: string, path: string): Cost | null {
-  if (path.startsWith('/api/files/')) return 'files';
+  if (path.startsWith('/api/files/')) {
+    return method === 'GET' ? 'fileRead' : 'fileWrite';
+  }
 
   /* The whole signed-out surface, including the two endpoints that are
      cheapest to call and most expensive to serve: /auth/request sweeps
@@ -132,16 +135,28 @@ function costOf(method: string, path: string): Cost | null {
  */
 export async function gate(env: Env, req: Request, path: string): Promise<void> {
   const actor = actorKey(req);
+  const cost = costOf(req.method, path);
 
   /* Order matters: the broadest and cheapest ceiling first, so a flood is
-     rejected at the first check rather than walking the whole ladder. */
-  await check(env.RL_BURST, 'RL_BURST', actor);
+     rejected at the first check rather than walking the whole ladder.
+
+     Files are the exception to the burst wall. The client walks entire
+     libraries in sequential loops — downloadAll(), and the upload and cover
+     passes in syncFiles() — with nothing pacing them, so the honest length
+     of a legitimate burst is however many books somebody owns. Ten seconds
+     is the wrong window to judge that in, and a false 429 there does not
+     look like a rate limit to the reader; it looks like sync is broken. So
+     file traffic answers to its own per-minute ceilings and to RL_ADDRESS,
+     which is still above it. */
+  if (cost !== 'fileRead' && cost !== 'fileWrite') {
+    await check(env.RL_BURST, 'RL_BURST', actor);
+  }
   await check(env.RL_ADDRESS, 'RL_ADDRESS', clientIp(req));
 
-  const cost = costOf(req.method, path);
   if (!cost) return;
 
-  if (cost === 'files') return check(env.RL_FILES, 'RL_FILES', actor);
+  if (cost === 'fileRead') return check(env.RL_FILES_READ, 'RL_FILES_READ', actor);
+  if (cost === 'fileWrite') return check(env.RL_FILES_WRITE, 'RL_FILES_WRITE', actor);
   if (cost === 'write') return check(env.RL_WRITE, 'RL_WRITE', actor);
   /* Keyed by address rather than session: the point of this one is the
      caller who does not have a session yet and is trying to acquire one. */
