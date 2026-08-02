@@ -35,7 +35,7 @@
 		// The canonical origin. Passkeys are bound to this hostname, so it has
 		// to be the address people actually use — change it when you attach a
 		// custom domain, or every assertion will be refused by the browser.
-		"APP_ORIGIN": "http://localhost:8787",
+		"APP_ORIGIN": "https://readsoluna.com",
 		"MAIL_FROM": "Soluna <hello@readsoluna.com>"
 	},
 	"d1_databases": [

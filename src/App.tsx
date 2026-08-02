@@ -10,6 +10,7 @@ import { Library } from './ui/Library';
 import { Stats } from './ui/Stats';
 import { Account } from './ui/Account';
 import { Device } from './ui/Device';
+import { Impressum } from './ui/Impressum';
 import { Ratings } from './ui/Ratings';
 import { Reader } from './ui/Reader';
 import { IconAccount, IconDevice, IconLibrary, IconShelf, IconStats } from './ui/Icons';
@@ -33,6 +34,7 @@ function tabFromHash(): Tab {
 export default function App() {
   const [tab, setTab] = useState<Tab>(tabFromHash);
   const [reading, setReading] = useState<string | null>(null);
+  const [showImpressum, setShowImpressum] = useState(false);
   const load = useLibrary((s) => s.load);
   const loading = useLibrary((s) => s.loading);
   const mode = useSettings((s) => s.mode);
@@ -115,7 +117,9 @@ export default function App() {
 
   return (
     <div className="app">
-      {loading ? (
+      {showImpressum ? (
+        <Impressum onClose={() => setShowImpressum(false)} />
+      ) : loading ? (
         <div style={{ flex: 1 }} />
       ) : tab === 'library' ? (
         <Library onOpen={setReading} />
@@ -126,10 +130,10 @@ export default function App() {
       ) : tab === 'stats' ? (
         <Stats />
       ) : (
-        <Account />
+        <Account onImpressum={() => setShowImpressum(true)} />
       )}
 
-      {!reading && (
+      {!reading && !showImpressum && (
         <nav className="tabbar">
           <button
             className={tab === 'library' ? 'on' : ''}
