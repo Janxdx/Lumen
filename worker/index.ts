@@ -26,6 +26,7 @@ import {
   requireUser,
 } from './auth';
 import { pull, push, type Changes } from './data';
+import { editionCover, lookupEdition } from './editions';
 import { SESSION_TTL, type Env } from './env';
 import { gate } from './limit';
 import {
@@ -186,6 +187,36 @@ async function route(req: Request, env: Env, url: URL, path: string): Promise<Re
     const user = await requireUser(env, req);
     const changes = await readJson<Partial<Changes>>(req);
     return json({ cursor: await push(env, user, changes) });
+  }
+
+  /* ── editions ────────────────────────────────────────────────────
+     What a book looks like in the world, as opposed to what this reader
+     thought of it. Requires a session like everything else under /api,
+     though what comes back is public: making outbound requests to three
+     other people's services on behalf of an anonymous caller is how you
+     become their rate limit problem. See worker/editions.ts. */
+
+  if (get('/api/lookup')) {
+    await requireUser(env, req);
+    return json(
+      await lookupEdition(env, {
+        key: url.searchParams.get('key') ?? '',
+        slug: url.searchParams.get('slug') ?? '',
+        title: url.searchParams.get('title') ?? '',
+        author: url.searchParams.get('author') ?? '',
+        lang: url.searchParams.get('lang') ?? 'en',
+      })
+    );
+  }
+
+  /* Served from our own origin rather than linked to the catalogue's,
+     because a cross-origin image taints a canvas and a tainted canvas
+     cannot be read — and reading the pixels is how the shelf gets a book's
+     real colours. Same-origin is the feature, not the hosting. */
+  const editionMatch = /^\/api\/editions\/cover\/([a-z0-9-]+)$/.exec(path);
+  if (editionMatch && req.method === 'GET') {
+    await requireUser(env, req);
+    return editionCover(env, editionMatch[1]);
   }
 
   /* ── files ───────────────────────────────────────────────────── */

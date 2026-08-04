@@ -26,6 +26,80 @@ Sections that are now history rather than pending work:
 - **Supabase removed; D1 schema now deploys itself** (below).
 - **renamed from Lumen to Soluna** (below).
 
+## What a book looks like in the world (covers, spines, Wikipedia)
+
+The shelf now draws two ways, and the toggle in the ratings tab is a real
+choice rather than a display option. **Data** is what it always was —
+colour is the mood, height is the score, thickness is the length.
+**Shelf** gives height and colour back to the object: the cover's own
+palette, the paper's own thickness, the series' own livery. Those cannot
+both be true at once. A Reclam is short because it is a Reclam, not
+because you disliked it, so in the realistic mode the score drops to the
+number stamped at the foot, which you have to walk up and read. The
+reasoning is at the top of `src/engine/spine.ts`; don't re-litigate it
+without reading that.
+
+**Real spine images do not exist as data.** No catalogue holds a
+photograph of the side of a book — Open Library, Google Books and everyone
+else hold the front cover and nothing else. What is available is the
+publisher and the series, and a series exists precisely so that every book
+in it looks the same. Hence `LIVERIES` in `src/engine/edition.ts`: twelve
+hand-written liveries (Reclam yellow, the Penguin tri-band, edition
+suhrkamp, rororo, dtv, Fischer, Hanser, Oxford, Vintage, Manesse) drawn in
+CSS at any thickness. Anything without a livery falls back to the cover's
+own colours.
+
+Six things worth not re-deriving:
+
+- **The lookup is on the server because it cannot be anywhere else.**
+  Google Books sends no CORS headers; Open Library wants a descriptive
+  `User-Agent`, which is a forbidden header name in `fetch`; a Google key
+  must not ship to a client; and the answer is identical for every reader
+  alive. `worker/editions.ts` does all four catalogue calls.
+- **The cover is proxied through R2 for the canvas, not for the network.**
+  `getImageData` on a canvas that has drawn a cross-origin image throws,
+  and reading those pixels is where the palette comes from — so the cover
+  has to arrive same-origin. Served from `/api/editions/cover/<slug>`.
+- **`edition_cache` has no `user_id`,** the only table in the schema that
+  doesn't. Sound because nothing in it came from a reader: it is a copy of
+  a public catalogue record, and two readers of the same novel *should*
+  share the row. What would be private is who looked up what, and there is
+  no column for it. Covers likewise live under a shared `editions/` prefix
+  in R2, away from the per-user objects.
+- **Dexie v6 `editions` is outside sync and outside tombstones,** like
+  `passages` — but for a different reason. A passage index is cheap to
+  rebuild; an edition is cheap *to the user*, because the server already
+  cached it, so a second iPad gets it from D1 without troubling any
+  catalogue. Syncing rows would move the same bytes through more
+  machinery for the same result.
+- **The matcher lives in `src/engine/edition.ts` and the Worker imports
+  it.** It was duplicated first and that was wrong: two copies typecheck
+  independently, the tests only exercise one, and the symptom is a cover
+  that is right on the shelf and wrong in the sheet. The file is pure
+  TypeScript with no imports so that it can be shared across the two
+  tsconfigs.
+- **A lookup that finds nothing still writes a row,** so the app stops
+  asking — and `knowsAnything()` in `spine.ts` is what stops the shelf
+  drawing that row as a real book. Without it every book the catalogues
+  missed comes out the same default height in the same colour.
+
+`tests/edition.test.mts` is the layer no build can have an opinion about:
+a matcher that confidently returns the wrong book typechecks perfectly.
+It caught four real bugs on first run — `ß` deleted rather than folded to
+`ss` (so "Der Prozeß" and "Der Prozess" were two books), a subtitle rule
+that ran after normalisation had already eaten the colon, and a pure-recall
+overlap score that rated *Lektürehilfen Franz Kafka Der Prozess* a perfect
+match for the novel. The third is why `wordOverlap` mixes in a quarter of
+the precision.
+
+`RL_LOOKUP` (namespace 1008, 60/min) is the first ceiling here that
+protects somebody else's service rather than ours. The client paces itself
+at one lookup a second and stops on a 429, picking up where it left off.
+
+**Schema change:** `npm run db:local` is needed for local dev. Remote is
+automatic via `predeploy`. `GOOGLE_BOOKS_KEY` is an optional secret —
+unkeyed requests work; set it if lookups start coming back empty.
+
 ## The PWA update path
 
 The offline shell used to call `skipWaiting()` in `install` and delete every
