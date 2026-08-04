@@ -3,7 +3,13 @@ import { useLibrary } from '../store/library';
 import { useRatings } from '../store/ratings';
 import { BookCover } from './BookCover';
 import { IconCloud, IconImage, IconPlus, IconStar, IconTrash } from './Icons';
-import { formatDuration, relativeDate } from '../engine/stats';
+import {
+  formatDuration,
+  formatEta,
+  readingPace,
+  relativeDate,
+  timeForWords,
+} from '../engine/stats';
 import { RatingSheet } from './RatingSheet';
 import { ScanSheet } from './ScanSheet';
 import { Sheet } from './Sheet';
@@ -42,6 +48,25 @@ export function Library({ onOpen }: { onOpen: (id: string) => void }) {
     for (const s of sessions) map[s.bookId] = (map[s.bookId] ?? 0) + s.ms;
     return map;
   }, [sessions]);
+
+  /* How long each book still has in it, at the speed you actually read.
+     Computed per book rather than once for the library because
+     `readingPace` prefers a book's own sessions when it has enough of them
+     — a slow book and a fast one should not share an estimate. */
+  const timeLeft = useMemo(() => {
+    const map: Record<string, { ms: number; total: number; wpm: number; measured: boolean }> = {};
+    for (const b of books) {
+      const pace = readingPace(sessions, b.id);
+      const left = Math.max(0, Math.round(b.totalWords * (1 - (progress[b.id]?.percent ?? 0))));
+      map[b.id] = {
+        ms: timeForWords(left, pace.wpm),
+        total: timeForWords(b.totalWords, pace.wpm),
+        wpm: pace.wpm,
+        measured: pace.measured,
+      };
+    }
+    return map;
+  }, [books, progress, sessions]);
 
   const handleFiles = async (files: FileList | null) => {
     if (!files) return;
@@ -120,7 +145,10 @@ export function Library({ onOpen }: { onOpen: (id: string) => void }) {
               </div>
               <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
                 {Math.round((recent.p?.percent ?? 0) * 100)}% ·{' '}
-                {formatDuration(timePerBook[recent.b.id] ?? 0)} read · last opened{' '}
+                <b style={{ fontWeight: 620 }}>
+                  {formatEta(timeLeft[recent.b.id]?.ms ?? 0)} left
+                </b>{' '}
+                · {formatDuration(timePerBook[recent.b.id] ?? 0)} read · last opened{' '}
                 {relativeDate(recent.p?.updatedAt ?? Date.now())}
               </p>
             </div>
@@ -171,6 +199,17 @@ export function Library({ onOpen }: { onOpen: (id: string) => void }) {
                           <i style={{ width: `${p.percent * 100}%` }} />
                         </div>
                       )}
+                      {/* An unstarted book shows what it costs to begin;
+                          one in progress shows what is left of it. */}
+                      <div className="a" style={{ marginTop: 4 }}>
+                        {p && p.percent > 0.99
+                          ? 'Finished'
+                          : `${formatEta(
+                              (p && p.percent > 0.002
+                                ? timeLeft[b.id]?.ms
+                                : timeLeft[b.id]?.total) ?? 0
+                            )}${p && p.percent > 0.002 ? ' left' : ''}`}
+                      </div>
                     </div>
                   </button>
                   <button
@@ -222,7 +261,9 @@ export function Library({ onOpen }: { onOpen: (id: string) => void }) {
                 <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
                   {detail.spine.length} chapters ·{' '}
                   {detail.totalWords.toLocaleString()} words · about{' '}
-                  {formatDuration((detail.totalWords / 250) * 60_000, true)} at 250 wpm
+                  {formatDuration(timeLeft[detail.id]?.total ?? 0, true)} at{' '}
+                  {timeLeft[detail.id]?.wpm ?? 250} wpm
+                  {timeLeft[detail.id]?.measured ? ' — your pace' : ''}
                 </p>
               </div>
             </div>
@@ -246,6 +287,16 @@ export function Library({ onOpen }: { onOpen: (id: string) => void }) {
               <div>
                 <div className="label">Time spent</div>
                 <div className="hint">{formatDuration(timePerBook[detail.id] ?? 0, true)}</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div className="label">Time left</div>
+                <div className="hint">
+                  {(progress[detail.id]?.percent ?? 0) > 0.99
+                    ? 'Finished'
+                    : `${formatEta(timeLeft[detail.id]?.ms ?? 0)}${
+                        timeLeft[detail.id]?.measured ? ' at your pace' : ''
+                      }`}
+                </div>
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div className="label">Progress</div>
