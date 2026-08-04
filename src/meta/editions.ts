@@ -25,6 +25,29 @@ import { extractPalette } from './palette';
 /** Set once the server says no. See `paused` below. */
 let pausedUntil = 0;
 
+/* Why the last lookup produced nothing.
+ *
+ * Failing soft is right — a book without a cover must still draw — but the
+ * first cut failed soft *and silently*, which is a different thing and a
+ * worse one. Every way this can go wrong looks identical from the shelf:
+ * you switch to the realistic mode and nothing happens. Signed out, an old
+ * Worker without the endpoint, the vite dev server answering /api with the
+ * app's own index.html — all of them, in the end, "nothing happens".
+ *
+ * So the reason is kept and shown. `catalogue` is the one that is not a
+ * fault: the lookup worked and the book simply is not in any of them. */
+export type LookupTrouble =
+  | 'signed-out'
+  | 'no-endpoint'
+  | 'offline'
+  | 'rate-limited'
+  | null;
+
+let trouble: LookupTrouble = null;
+
+/** Why the shelf is not filling in, or null when nothing is wrong. */
+export const lookupTrouble = (): LookupTrouble => trouble;
+
 async function fetchEdition(
   key: string,
   title: string,
@@ -32,20 +55,62 @@ async function fetchEdition(
   lang: string
 ): Promise<EditionData | null> {
   const q = new URLSearchParams({ key, slug: editionSlug(key), title, author, lang });
-  const res = await fetch(`/api/lookup?${q}`, { credentials: 'same-origin' });
+
+  let res: Response;
+  try {
+    res = await fetch(`/api/lookup?${q}`, { credentials: 'same-origin' });
+  } catch {
+    trouble = 'offline';
+    return null;
+  }
+
+  if (res.status === 401) {
+    /* The endpoint needs a session. It is not reading anything private —
+       the answer is a public catalogue record — but it makes outbound
+       requests to three other people's services, and doing that for an
+       anonymous caller is how you become their rate limit problem. */
+    trouble = 'signed-out';
+    return null;
+  }
 
   if (res.status === 429) {
     /* The lookup ceiling, doing its job. Enriching a shelf for the first
        time is the one moment this can happen — sixty books at one a second
        against a sixty-a-minute ceiling has no headroom for a sync landing
        in the middle of it. Backing off for a minute and picking up where we
-       left off is invisible: the shelf fills in a little more each time it
-       is opened, and every answer already collected is on disk. */
+       left off is nearly invisible: the shelf fills in a little more each
+       time it is opened, and every answer already collected is on disk. */
     pausedUntil = Date.now() + 60_000;
+    trouble = 'rate-limited';
     return null;
   }
-  if (!res.ok) return null;
-  return (await res.json()) as EditionData;
+
+  if (!res.ok) {
+    trouble = 'no-endpoint';
+    return null;
+  }
+
+  /* A 200 is not enough on its own, and this is the check that would have
+     saved an evening. `vite dev` has no Worker behind it, so it answers
+     /api/lookup with the app's own index.html and a perfectly good 200 —
+     and the deployed app does the same for any path the Worker does not
+     claim, because the asset router falls through to the SPA shell. Both
+     then fail inside `res.json()`, where a parse error is indistinguishable
+     from a book nobody has heard of. Ask what it actually is instead. */
+  const type = res.headers.get('content-type') ?? '';
+  if (!type.includes('json')) {
+    trouble = 'no-endpoint';
+    return null;
+  }
+
+  try {
+    const data = (await res.json()) as EditionData;
+    trouble = null;
+    return data;
+  } catch {
+    trouble = 'no-endpoint';
+    return null;
+  }
 }
 
 async function fetchCover(coverPath: string): Promise<Blob | null> {
@@ -121,15 +186,11 @@ async function load(
   author: string,
   lang: string
 ): Promise<EditionRecord | null> {
-  let data: EditionData | null = null;
-  try {
-    data = await fetchEdition(key, title, author, lang);
-  } catch {
-    /* Offline, most likely. Not written to Dexie: an empty row would be
-       indistinguishable from "this book is not in any catalogue" and would
-       stop the app ever trying again. */
-    return null;
-  }
+  /* Nothing is written to Dexie on a failure. An empty row would be
+     indistinguishable from "this book is not in any catalogue" — which is
+     a row we *do* write, so the app stops asking — and the app would then
+     never try again for a book it simply could not reach today. */
+  const data = await fetchEdition(key, title, author, lang);
   if (!data) return null;
 
   let cover: ArrayBuffer | undefined;
@@ -203,6 +264,7 @@ export async function fillShelf(
   onProgress?: () => void
 ): Promise<number> {
   let fetched = 0;
+  let missed = 0;
 
   for (const book of books) {
     if (paused()) break;
@@ -215,6 +277,13 @@ export async function fillShelf(
     if (row) {
       fetched++;
       onProgress?.();
+    } else {
+      /* Three failures in a row is not a run of obscure books, it is the
+         endpoint. Stopping is the point: without it a shelf of sixty
+         unreachable books spends a minute making sixty requests that
+         cannot work, and the reader watches a progress line that never
+         progresses. */
+      if (++missed >= 3 && lookupTrouble()) break;
     }
 
     await new Promise((r) => setTimeout(r, PACE_MS));

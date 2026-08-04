@@ -18,6 +18,7 @@ import { useRatings, rateableBooks, type Rateable } from '../store/ratings';
 import { useLibrary } from '../store/library';
 import { useDevice } from '../store/device';
 import { useEditions, type EditionSubject } from '../store/editions';
+import type { LookupTrouble } from '../meta/editions';
 import { useSettings } from '../store/settings';
 import { editionKey } from '../engine/edition';
 import {
@@ -31,6 +32,19 @@ import {
   type SortKey,
 } from '../engine/rating';
 import { relativeDate } from '../engine/stats';
+
+/* Each of these is a different thing to go and do, which is the whole
+   reason they are not one "couldn't load covers". `no-endpoint` is the one
+   that bit in practice: `vite dev` has no Worker behind it and answers
+   /api/lookup with the app's own index.html, so the shelf is talking to
+   itself. `npm run worker` is the local setup that has an API. */
+const TROUBLE: Record<NonNullable<LookupTrouble>, string> = {
+  'signed-out': 'Sign in on the account tab to look covers up.',
+  'no-endpoint':
+    'No lookup service answered. On a dev server use `npm run worker`; on the live app, deploy again.',
+  offline: 'Offline — the shelf will fill in next time you have a connection.',
+  'rate-limited': 'Pausing for a minute, then carrying on where it left off.',
+};
 
 export function Ratings() {
   const ratings = useRatings((s) => s.ratings);
@@ -59,6 +73,7 @@ export function Ratings() {
   const setSetting = useSettings((s) => s.set);
   const byKey = useEditions((s) => s.byKey);
   const filling = useEditions((s) => s.filling);
+  const trouble = useEditions((s) => s.trouble);
   const fill = useEditions((s) => s.fill);
 
   /* What each rating's book knows about itself, over and above the rating.
@@ -188,9 +203,13 @@ export function Ratings() {
               </div>
             </div>
 
-            {shelfMode === 'shelf' && filling && (
+            {shelfMode === 'shelf' && (filling || trouble) && (
               <p className="muted" style={{ fontSize: 12, marginBottom: 12 }}>
-                Finding covers — the shelf fills in as they arrive.
+                {/* The realistic shelf degrades to the ordinary one when a
+                    lookup fails, which is right — and which also makes
+                    every possible failure look identical from here: you
+                    press Shelf and nothing happens. So say which one. */}
+                {trouble ? TROUBLE[trouble] : 'Finding covers — the shelf fills in as they arrive.'}
               </p>
             )}
 

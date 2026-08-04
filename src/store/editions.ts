@@ -10,7 +10,7 @@
 import { create } from 'zustand';
 import { db, type EditionRecord } from '../db';
 import { editionKey } from '../engine/edition';
-import { ensureEdition, fillShelf, paused } from '../meta/editions';
+import { ensureEdition, fillShelf, lookupTrouble, paused, type LookupTrouble } from '../meta/editions';
 
 /** A book as any of the three shelves can describe it. */
 export interface EditionSubject {
@@ -28,6 +28,11 @@ interface EditionState {
   byKey: Record<string, EditionRecord>;
   /** true while a shelf-wide fill is running, for the quiet progress line */
   filling: boolean;
+  /** why nothing is arriving, when that is the case. The realistic shelf
+      degrades to the ordinary one on failure, which is right and which
+      also makes every failure look like "the button does nothing" — so
+      the reason has to reach the screen. */
+  trouble: LookupTrouble;
   loaded: boolean;
 
   load(): Promise<void>;
@@ -46,6 +51,7 @@ const defaultLang = (): string =>
 export const useEditions = create<EditionState>((set, get) => ({
   byKey: {},
   filling: false,
+  trouble: null,
   loaded: false,
 
   /* Read whole on boot. A few hundred rows of small JSON plus the cover
@@ -69,7 +75,8 @@ export const useEditions = create<EditionState>((set, get) => ({
     if (get().byKey[key]) return;
 
     const row = await ensureEdition(subject.title, subject.author, subject.lang ?? defaultLang());
-    if (row) set((s) => ({ byKey: { ...s.byKey, [key]: row } }));
+    if (row) set((s) => ({ byKey: { ...s.byKey, [key]: row }, trouble: null }));
+    else set({ trouble: lookupTrouble() });
   },
 
   /* One at a time and a second apart — see `fillShelf`. The store is
@@ -77,7 +84,7 @@ export const useEditions = create<EditionState>((set, get) => ({
      by book instead of jumping when the whole run finishes. */
   async fill(subjects) {
     if (get().filling || paused()) return;
-    set({ filling: true });
+    set({ filling: true, trouble: null });
     try {
       await fillShelf(
         subjects.map((s) => ({
@@ -89,7 +96,7 @@ export const useEditions = create<EditionState>((set, get) => ({
       );
       await refresh(set);
     } finally {
-      set({ filling: false });
+      set({ filling: false, trouble: lookupTrouble() });
     }
   },
 }));
