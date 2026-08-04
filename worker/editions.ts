@@ -475,12 +475,40 @@ interface CacheRow {
   fetched_at: number;
 }
 
+/* The cache fails open, loudly, the way `gate()` in limit.ts does.
+
+   A deployment whose database predates this feature should look up
+   editions slowly rather than not at all: the cache is an optimisation for
+   somebody else's rate limit, and losing it costs a round trip, while
+   letting its absence throw costs the entire feature. This has now been
+   the failure twice — `ratings` in 2026-08, and `edition_cache` right
+   after — and both times the cause was a deploy that skipped the schema.
+   `npm run deploy` applies it via `predeploy`; `npx wrangler deploy` does
+   not, and there is no way to make it. So the code stops depending on it. */
+function cacheUnavailable(e: unknown): boolean {
+  const message = e instanceof Error ? e.message : String(e);
+  if (/no such table/i.test(message)) {
+    console.warn(
+      'edition_cache is missing — lookups work but nothing is cached. ' +
+        'Apply worker/schema.sql: `npm run db:remote` (or deploy with `npm run deploy`).'
+    );
+    return true;
+  }
+  return false;
+}
+
 async function readCache(env: Env, key: string): Promise<EditionData | null> {
-  const row = await env.DB.prepare(
-    'select payload, fetched_at from edition_cache where key = ?'
-  )
-    .bind(key)
-    .first<CacheRow>();
+  let row: CacheRow | null = null;
+  try {
+    row = await env.DB.prepare(
+      'select payload, fetched_at from edition_cache where key = ?'
+    )
+      .bind(key)
+      .first<CacheRow>();
+  } catch (e) {
+    if (!cacheUnavailable(e)) throw e;
+    return null;
+  }
   if (!row) return null;
 
   let data: EditionData;
@@ -500,13 +528,20 @@ async function readCache(env: Env, key: string): Promise<EditionData | null> {
   return data;
 }
 
-const writeCache = (env: Env, key: string, data: EditionData): Promise<unknown> =>
-  env.DB.prepare(
-    `insert into edition_cache (key, payload, fetched_at) values (?, ?, ?)
-       on conflict(key) do update set payload = excluded.payload, fetched_at = excluded.fetched_at`
-  )
-    .bind(key, JSON.stringify(data), Date.now())
-    .run();
+async function writeCache(env: Env, key: string, data: EditionData): Promise<void> {
+  try {
+    await env.DB.prepare(
+      `insert into edition_cache (key, payload, fetched_at) values (?, ?, ?)
+         on conflict(key) do update set payload = excluded.payload, fetched_at = excluded.fetched_at`
+    )
+      .bind(key, JSON.stringify(data), Date.now())
+      .run();
+  } catch (e) {
+    /* Same as the read: an answer we cannot store is still an answer, and
+       the reader gets their cover. Only the next lookup is slower. */
+    if (!cacheUnavailable(e)) throw e;
+  }
+}
 
 /* ── the endpoint ──────────────────────────────────────────────────── */
 

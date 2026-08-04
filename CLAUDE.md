@@ -97,8 +97,26 @@ protects somebody else's service rather than ours. The client paces itself
 at one lookup a second and stops on a 429, picking up where it left off.
 
 **Schema change:** `npm run db:local` is needed for local dev. Remote is
-automatic via `predeploy`. `GOOGLE_BOOKS_KEY` is an optional secret —
+automatic via `predeploy` — **but only when you deploy with `npm run
+deploy`.** `npx wrangler deploy` skips npm's pre-hook and ships the Worker
+against a database that has never seen `edition_cache`. That is now the
+second time a table has gone missing in prod this way (`ratings` was the
+first), so the lookup no longer depends on the cache existing: `readCache`
+and `writeCache` catch "no such table", warn with the command that fixes
+it, and carry on uncached. `GOOGLE_BOOKS_KEY` is an optional secret —
 unkeyed requests work; set it if lookups start coming back empty.
+
+**The shelf tells you why it is empty.** Failing soft is right — a book
+without a cover still draws — but the first cut failed soft *and* silently,
+so signed out, no endpoint, offline, rate-limited and a 500 all looked
+identical: press Shelf, nothing happens. `LookupTrouble` in
+`src/meta/editions.ts` keeps the reason and the tab prints it, and a 5xx
+passes the Worker's own sentence through rather than replacing it with
+something vaguer. Two traps found doing this: `vite dev` answers `/api`
+with the app's own `index.html` and a **200** (hence the content-type check
+before the body is trusted, and the new dev proxy to wrangler's port), and
+a run now stops after three consecutive failures instead of spending a
+minute on requests that cannot work.
 
 ## The PWA update path
 

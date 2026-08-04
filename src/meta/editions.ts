@@ -36,17 +36,39 @@ let pausedUntil = 0;
  *
  * So the reason is kept and shown. `catalogue` is the one that is not a
  * fault: the lookup worked and the book simply is not in any of them. */
-export type LookupTrouble =
+export type TroubleKind =
   | 'signed-out'
   | 'no-endpoint'
   | 'offline'
   | 'rate-limited'
-  | null;
+  /** the Worker answered, and said what was wrong — pass its words on */
+  | 'server';
 
-let trouble: LookupTrouble = null;
+export interface LookupTrouble {
+  kind: TroubleKind;
+  /** the server's own sentence, when it sent one */
+  detail?: string;
+}
+
+let trouble: LookupTrouble | null = null;
 
 /** Why the shelf is not filling in, or null when nothing is wrong. */
-export const lookupTrouble = (): LookupTrouble => trouble;
+export const lookupTrouble = (): LookupTrouble | null => trouble;
+
+/* Every endpoint here answers an error as `{ error }` — including the one
+   case worth naming out loud, a database whose schema predates a feature.
+   `toResponse` in worker/http.ts turns "no such table: edition_cache" into
+   a sentence that says which command fixes it, and throwing that away in
+   favour of a generic "couldn't load covers" is how a two-minute problem
+   becomes an evening. Read the body before deciding what happened. */
+async function serverSaid(res: Response): Promise<string | undefined> {
+  try {
+    const body = (await res.json()) as { error?: string } | null;
+    return body?.error;
+  } catch {
+    return undefined;
+  }
+}
 
 async function fetchEdition(
   key: string,
@@ -60,7 +82,7 @@ async function fetchEdition(
   try {
     res = await fetch(`/api/lookup?${q}`, { credentials: 'same-origin' });
   } catch {
-    trouble = 'offline';
+    trouble = { kind: 'offline' };
     return null;
   }
 
@@ -69,7 +91,7 @@ async function fetchEdition(
        the answer is a public catalogue record — but it makes outbound
        requests to three other people's services, and doing that for an
        anonymous caller is how you become their rate limit problem. */
-    trouble = 'signed-out';
+    trouble = { kind: 'signed-out' };
     return null;
   }
 
@@ -81,12 +103,19 @@ async function fetchEdition(
        left off is nearly invisible: the shelf fills in a little more each
        time it is opened, and every answer already collected is on disk. */
     pausedUntil = Date.now() + 60_000;
-    trouble = 'rate-limited';
+    trouble = { kind: 'rate-limited' };
     return null;
   }
 
   if (!res.ok) {
-    trouble = 'no-endpoint';
+    /* A 5xx means the Worker is there and something inside it went wrong,
+       which is a different problem from the endpoint not existing — and it
+       is the case where the server has already written the useful
+       sentence. A missing `edition_cache` lands here and says so. */
+    const detail = await serverSaid(res);
+    trouble = detail
+      ? { kind: 'server', detail }
+      : { kind: 'no-endpoint' };
     return null;
   }
 
@@ -99,7 +128,7 @@ async function fetchEdition(
      from a book nobody has heard of. Ask what it actually is instead. */
   const type = res.headers.get('content-type') ?? '';
   if (!type.includes('json')) {
-    trouble = 'no-endpoint';
+    trouble = { kind: 'no-endpoint' };
     return null;
   }
 
@@ -108,7 +137,7 @@ async function fetchEdition(
     trouble = null;
     return data;
   } catch {
-    trouble = 'no-endpoint';
+    trouble = { kind: 'no-endpoint' };
     return null;
   }
 }

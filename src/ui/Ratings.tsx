@@ -18,7 +18,7 @@ import { useRatings, rateableBooks, type Rateable } from '../store/ratings';
 import { useLibrary } from '../store/library';
 import { useDevice } from '../store/device';
 import { useEditions, type EditionSubject } from '../store/editions';
-import type { LookupTrouble } from '../meta/editions';
+import type { TroubleKind } from '../meta/editions';
 import { useSettings } from '../store/settings';
 import { editionKey } from '../engine/edition';
 import {
@@ -38,12 +38,16 @@ import { relativeDate } from '../engine/stats';
    that bit in practice: `vite dev` has no Worker behind it and answers
    /api/lookup with the app's own index.html, so the shelf is talking to
    itself. `npm run worker` is the local setup that has an API. */
-const TROUBLE: Record<NonNullable<LookupTrouble>, string> = {
+const TROUBLE: Record<TroubleKind, string> = {
   'signed-out': 'Sign in on the account tab to look covers up.',
   'no-endpoint':
     'No lookup service answered. On a dev server use `npm run worker`; on the live app, deploy again.',
   offline: 'Offline — the shelf will fill in next time you have a connection.',
   'rate-limited': 'Pausing for a minute, then carrying on where it left off.',
+  /* Never shown: a 'server' trouble always carries the Worker's own
+     sentence, which is more specific than anything that could be written
+     here. Present so the map stays exhaustive. */
+  server: 'The lookup service reported a problem.',
 };
 
 export function Ratings() {
@@ -209,7 +213,9 @@ export function Ratings() {
                     lookup fails, which is right — and which also makes
                     every possible failure look identical from here: you
                     press Shelf and nothing happens. So say which one. */}
-                {trouble ? TROUBLE[trouble] : 'Finding covers — the shelf fills in as they arrive.'}
+                {trouble
+                  ? (trouble.detail ?? TROUBLE[trouble.kind])
+                  : 'Finding covers — the shelf fills in as they arrive.'}
               </p>
             )}
 

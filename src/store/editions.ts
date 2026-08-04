@@ -32,7 +32,7 @@ interface EditionState {
       degrades to the ordinary one on failure, which is right and which
       also makes every failure look like "the button does nothing" — so
       the reason has to reach the screen. */
-  trouble: LookupTrouble;
+  trouble: LookupTrouble | null;
   loaded: boolean;
 
   load(): Promise<void>;
