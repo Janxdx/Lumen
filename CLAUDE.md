@@ -58,6 +58,8 @@ Three points worth not re-deriving:
   from the HTTP cache — the new worker installs the shell it is replacing and
   the update visibly does nothing. Hashed assets are immune; `index.html` is
   not.
+- **The shell is only ever read from `/`, never from `/index.html`.** See
+  below — this one shipped broken.
 - `BUILD` is a sha256 of the asset list plus `index.html`, not `Date.now()`.
   Any byte-difference in `sw.js` is a new worker to the browser, so a
   timestamp asked the reader to update to a bit-identical app after every
@@ -65,6 +67,45 @@ Three points worth not re-deriving:
   `/index.html`; the registration option is the belt to that suspenders.
 
 No schema change, so `npm run db:local` is not needed.
+
+### The redirect that took the app down
+
+The first cut of the above was deployed and bricked every install that
+accepted the update: `Safari kann die Seite nicht öffnen — Response served by
+service worker has redirections`, in the home-screen app and on the web.
+
+Cloudflare's asset router runs `html_handling: auto-trailing-slash`, so
+`/index.html` answers **301 → `/`**. `cache.add('/index.html')` follows that
+and stores the final response with its `redirected` flag set, and a response
+carrying that flag may not be returned for a navigation — the browser rejects
+the page outright. The entry had been in the precache all along; making
+navigations cache-first is what promoted it from an unused offline fallback
+to the only path, so the bug went from invisible to total in one deploy.
+
+Three things came out of it:
+
+- The shell is fetched from `SHELL_DOC = '/'` and nothing else, and every
+  response leaving the navigation branch goes through `flatten()`, which
+  rebuilds it from its body — `redirected` is a property of the Response
+  object, so a copy does not have it.
+- `strandedGeneration()`: on install the worker looks through the *other*
+  cache generations for a shell carrying that flag, and if it finds one it
+  calls `skipWaiting()` without being asked. A page that cannot load cannot
+  tap a banner, so wait-for-consent would have stranded those installs
+  permanently — the only other way out is clearing website data, which takes
+  the reader's local library with it. Reading the flag rather than a list of
+  bad build ids means it cannot misfire on a healthy install and needs no
+  maintenance once the poisoned generations are gone.
+- `BUILD` now hashes `sw.js` too. It did not, and a worker-only fix leaves the
+  assets untouched — so the fixed worker named its cache after the generation
+  it was replacing, and `strandedGeneration()` skipped it as its own. Caught
+  by the build printing an unchanged id, not by anything cleverer.
+
+`tests/sw.test.mts` evaluates `public/sw.js` against stand-in globals and a
+fake Cloudflare that redirects `/index.html` the way the real one does. It
+fails on the code as shipped. A worker cannot be typechecked into correctness
+and a build will not exercise it, so this is the only layer that would have
+caught it.
 
 ## Renamed from Lumen to Soluna
 
