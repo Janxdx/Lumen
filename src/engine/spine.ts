@@ -127,6 +127,13 @@ export interface SpineLook {
   imprint?: string;
   /** named so the sheet can say where the look came from */
   livery?: Livery;
+  /** a data URL, the cover's own edge stretched to fill the spine — set
+      only where no livery matched, which is also the only case where
+      `background` is a flat ground rather than the thing actually shown.
+      See `extractEdgeStrip`; drawn by `SpineWall` as a second background
+      layer under the same lit/shadowed sheen `bind` paints for everyone
+      else. */
+  textureUrl?: string;
   /** true when this is drawn from real data rather than from the rating */
   real: boolean;
 }
@@ -253,6 +260,11 @@ export function spineLook(input: LookInput): SpineLook {
     direction: spineDirection(input.language ?? edition.language),
     ...(livery?.imprint ? { imprint: livery.imprint } : {}),
     ...(livery ? { livery } : {}),
+    /* Only where no livery matched: a livery is a real convention for how
+       that publisher's spine looks, and beats a guess made from one edge
+       of the front cover the same way it already beats the cover's own
+       palette a few lines up. */
+    ...(!livery && edition.edgeTexture ? { textureUrl: edition.edgeTexture } : {}),
     real: true,
   };
 }

@@ -18,7 +18,7 @@
 
 import { db, trimEditionCache, type EditionRecord } from '../db';
 import { editionKey, editionSlug, type EditionData } from '../engine/edition';
-import { extractPalette } from './palette';
+import { extractEdgeStrip, extractPalette } from './palette';
 
 /**
  * Which generation of this code wrote a cached row.
@@ -37,8 +37,11 @@ import { extractPalette } from './palette';
  *   2  the palette's white test used the highest channel instead of the
  *      lowest, so every saturated colour was discarded as paper and vivid
  *      covers came back with no palette at all
+ *   3  adds edgeTexture — a blurred strip off the cover's own edge that a
+ *      spine with no livery is now drawn in, rather than the flat ground
+ *      `groundFrom` reduces the palette to; see extractEdgeStrip
  */
-export const EXTRACT_VERSION = 2;
+export const EXTRACT_VERSION = 3;
 
 const stale = (row: EditionRecord): boolean => (row.v ?? 1) < EXTRACT_VERSION;
 
@@ -254,16 +257,18 @@ async function load(
   let cover: ArrayBuffer | undefined;
   let coverType: string | undefined;
   let palette: string[] | undefined;
+  let edgeTexture: string | undefined;
 
   if (data.coverPath) {
     const blob = await fetchCover(data.coverPath);
     if (blob) {
-      /* The palette is read from the Blob while we still hold it, before it
-         is drained to bytes. Doing it later would mean rebuilding a Blob
-         from the stored ArrayBuffer on every launch — the extraction is
-         cheap but it is not free, and the answer never changes. */
+      /* Both read from the Blob while we still hold it, before it is
+         drained to bytes. Doing it later would mean rebuilding a Blob from
+         the stored ArrayBuffer on every launch — the extraction is cheap
+         but it is not free, and the answer never changes. */
       const swatches = await extractPalette(blob);
       if (swatches.length) palette = swatches.map((s) => s.hex);
+      edgeTexture = (await extractEdgeStrip(blob)) ?? undefined;
 
       /* Drained to bytes rather than stored as the Blob: IndexedDB refuses
          a blob whose backing is still held elsewhere and takes the
@@ -273,11 +278,16 @@ async function load(
     }
   }
 
+  const derived: Partial<EditionData> = {
+    ...(palette ? { palette } : {}),
+    ...(edgeTexture ? { edgeTexture } : {}),
+  };
+
   const now = Date.now();
   const record: EditionRecord = {
     key,
     v: EXTRACT_VERSION,
-    data: palette ? { ...data, palette } : data,
+    data: Object.keys(derived).length ? { ...data, ...derived } : data,
     ...(cover ? { cover, coverType } : {}),
     fetchedAt: now,
     usedAt: now,

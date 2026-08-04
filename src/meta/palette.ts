@@ -88,6 +88,76 @@ export async function extractPalette(blob: Blob): Promise<Swatch[]> {
   }
 }
 
+/* ── the edge, stretched into a spine ────────────────────────────────
+ *
+ * `extractPalette` answers "roughly what colour is this cover" with one
+ * flat swatch. A spine is not flat, and a real one usually carries the
+ * cover's own edge — its background colour, and whatever horizontal bands
+ * sit near that margin — down its whole height. Sampling that edge and
+ * stretching it, rather than averaging the cover into a single ground the
+ * way `groundFrom` does, is what lets a spine with no livery still read as
+ * an edition of *this* cover rather than of the mood it was rated.
+ */
+
+/** How far in from the cover's edge to sample, as a share of its width —
+    not a fixed pixel count, so a phone photo and a Google Books thumbnail
+    crop the same fraction of the cover regardless of resolution. */
+const EDGE_FRACTION = 0.08;
+
+/** Output size. Small on purpose: the blur below throws away anything a
+    few pixels of width could not hold, and a canvas this size keeps the
+    resulting PNG a few hundred bytes — cheap enough to store inline as a
+    data URL rather than a second object to fetch. */
+const TEX_W = 12;
+const TEX_H = 220;
+
+/**
+ * A strip off the edge of a cover, stretched and softened into something a
+ * spine can be drawn in.
+ *
+ * Not a crop of the spine — nobody's catalogue holds one, see the note at
+ * the top of `engine/edition.ts` — an *inference* from the one edge of the
+ * cover that would, if the book were rebound, become the spine's own face.
+ * Reads top to bottom rather than reducing to one swatch, which is the
+ * point: a title block near the head and plain stock below comes back as a
+ * title block near the head and plain stock below.
+ *
+ * Blurred hard, deliberately, rather than trying to judge whether the edge
+ * is "clean enough" to use raw the way `quantize` judges a palette. A sharp
+ * crop risks smearing a letter or a barcode fragment the width of a spine;
+ * a soft one reads as an ambient colour wash whatever was actually printed
+ * there, which is the honest thing to promise from a single edge of
+ * pixels. Never lets a livery down, either — `spineLook` only reaches for
+ * this where no livery matched, the same rule `groundFrom` already answers
+ * to.
+ */
+export async function extractEdgeStrip(blob: Blob): Promise<string | null> {
+  let bitmap: ImageBitmap | null = null;
+  try {
+    bitmap = await createImageBitmap(blob);
+
+    const edgePx = Math.max(2, Math.round(bitmap.width * EDGE_FRACTION));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = TEX_W;
+    canvas.height = TEX_H;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    /* The blur runs in the same draw that does the stretching, so nothing
+       sharp survives long enough to alias when a few thousand source
+       pixels become twelve. */
+    ctx.filter = 'blur(3px)';
+    ctx.drawImage(bitmap, 0, 0, edgePx, bitmap.height, 0, 0, TEX_W, TEX_H);
+
+    return canvas.toDataURL('image/png');
+  } catch {
+    return null;
+  } finally {
+    bitmap?.close();
+  }
+}
+
 /**
  * Is this pixel paper or ink rather than colour?
  *

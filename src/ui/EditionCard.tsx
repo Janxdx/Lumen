@@ -97,7 +97,7 @@ export function EditionCard({ title, author, language, publisher }: Props) {
         <p className="edition-livery">
           {livery
             ? `Drawn on the shelf as ${livery.label}`
-            : d.palette?.length
+            : d.palette?.length || d.edgeTexture
               ? 'Drawn on the shelf in its own cover colours'
               : coverUrl
                 ? 'No usable colour in the cover — drawn by mood'

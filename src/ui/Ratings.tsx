@@ -151,12 +151,17 @@ export function Ratings() {
     for (const [id, subject] of subjects) {
       const key = editionKey(subject.title, subject.author);
       const row = byKey[key];
-      const ownPalette = subject.bookId ? ownCoverById[subject.bookId] : undefined;
+      const ownArt = subject.bookId ? ownCoverById[subject.bookId] : undefined;
       /* The book's own cover stands in only on a definitive miss — see the
-         effect above — and only when it actually had usable colour. */
+         effect above — and only when something of it actually survived
+         extraction. */
       const fallback: EditionData | undefined =
-        row && !knowsAnything(row.data) && ownPalette?.length
-          ? { key, palette: ownPalette }
+        row && !knowsAnything(row.data) && (ownArt?.palette?.length || ownArt?.texture)
+          ? {
+              key,
+              ...(ownArt.palette?.length ? { palette: ownArt.palette } : {}),
+              ...(ownArt.texture ? { edgeTexture: ownArt.texture } : {}),
+            }
           : undefined;
       const edition = fallback ?? row?.data;
       out[id] = {

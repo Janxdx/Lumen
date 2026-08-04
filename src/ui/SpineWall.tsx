@@ -23,7 +23,7 @@
  */
 
 import { useMemo } from 'react';
-import { spineLook, type ShelfMode } from '../engine/spine';
+import { spineLook, type ShelfMode, type SpineLook } from '../engine/spine';
 import type { RatingRecord } from '../engine/rating';
 import type { EditionData } from '../engine/edition';
 
@@ -33,6 +33,28 @@ export interface SpineExtras {
   edition?: EditionData;
   publisher?: string;
   language?: string;
+}
+
+/* The same lit-down-the-left, shadowed-at-the-right sheen `bind()` paints
+   into every flat spine in engine/spine.ts — translucent here instead of
+   opaque, because this one goes on top of a texture image rather than
+   being the whole face. Kept out of engine/spine.ts because it is a CSS
+   background layer, not a colour, and that file trades in colours. */
+const TEXTURE_SHEEN =
+  'linear-gradient(100deg, rgba(255,255,255,0.26) 0 8%, rgba(0,0,0,0) 22% 78%, rgba(0,0,0,0.32) 100%)';
+
+/** The background half of a spine's inline style, pulled out of the JSX
+    below purely so TypeScript sees one object shape instead of a union of
+    two — inlining the conditional there made every other property on the
+    style object suspect too. */
+function faceStyle(look: SpineLook): React.CSSProperties {
+  if (look.textureUrl) {
+    return {
+      backgroundImage: `${TEXTURE_SHEEN}, url(${look.textureUrl})`,
+      backgroundSize: '100% 100%, 100% 100%',
+    };
+  }
+  return { background: look.background };
 }
 
 interface Props {
@@ -77,7 +99,7 @@ export function SpineWall({ ratings, dark, mode, extras, onOpen, activeId }: Pro
               height: look.height,
               // the animation staggers along the shelf, left to right
               animationDelay: `${Math.min(i, 24) * 22}ms`,
-              background: look.background,
+              ...faceStyle(look),
               color: look.ink,
               '--accent': look.accent,
             } as React.CSSProperties}

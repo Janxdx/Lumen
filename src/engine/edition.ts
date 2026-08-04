@@ -137,6 +137,10 @@ export interface EditionData {
   coverPath?: string;
   /** dominant colours of the cover, darkest first; see meta/palette.ts */
   palette?: string[];
+  /** a blurred strip off the cover's own edge, stretched to fill a spine —
+      a data URL, used only where no livery applies; see
+      meta/palette.ts:extractEdgeStrip and spineLook */
+  edgeTexture?: string;
   wiki?: WikiSummary;
   /** how sure the match was, 0–1. Kept so a wrong cover is diagnosable
       rather than mysterious — the client shows it nowhere yet. */
