@@ -76,11 +76,18 @@ async function fetchEdition(
   author: string,
   lang: string
 ): Promise<EditionData | null> {
-  const q = new URLSearchParams({ key, slug: editionSlug(key), title, author, lang });
-
   let res: Response;
   try {
-    res = await fetch(`/api/lookup?${q}`, { credentials: 'same-origin' });
+    /* POST rather than GET, and not because anything is written here: a
+       miss makes four outbound requests and stores an object, which is not
+       what a GET promises. It also means the Worker's same-origin check
+       applies, so this cannot be triggered by a link. See worker/index.ts. */
+    res = await fetch('/api/lookup', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ key, slug: editionSlug(key), title, author, lang }),
+    });
   } catch {
     trouble = { kind: 'offline' };
     return null;

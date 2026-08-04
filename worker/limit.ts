@@ -114,6 +114,9 @@ function costOf(method: string, path: string): Cost | null {
      this Worker — it is about not being the reason somebody else's service
      starts refusing us. Tight, because a whole shelf is a few dozen
      lookups once and nothing after that. */
+  /* Method-independent on purpose: it is a POST, and it must stay counted
+     as a lookup rather than falling through to the generic write ceiling
+     below, which is sized for /api/push. */
   if (path === '/api/lookup') return 'lookup';
   /* Serving a stored cover is an R2 read like any other. */
   if (path.startsWith('/api/editions/')) return 'fileRead';

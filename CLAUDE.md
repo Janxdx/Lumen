@@ -96,6 +96,16 @@ the precision.
 protects somebody else's service rather than ours. The client paces itself
 at one lookup a second and stops on a 429, picking up where it left off.
 
+**`/api/lookup` is a POST although it reads.** It shipped as a GET and that
+was wrong: GETs are exempt from `requireSameOrigin` because they are
+assumed to change nothing, and the session cookie is `SameSite=Lax`, which
+is withheld from a cross-site image or fetch but *sent* on a top-level
+navigation. A link somebody clicked would therefore have spent their lookup
+budget — and Open Library's — on a search of the attacker's choosing.
+Nothing private was exposed either way, since the answer is a public
+catalogue record, but a request with four outbound side effects is not a
+GET. As a POST it is same-origin only and unreachable by link.
+
 **Schema change:** `npm run db:local` is needed for local dev. Remote is
 automatic via `predeploy` — **but only when you deploy with `npm run
 deploy`.** `npx wrangler deploy` skips npm's pre-hook and ships the Worker
