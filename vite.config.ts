@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
@@ -31,12 +32,31 @@ function serviceWorkerAssets(): Plugin {
         return; // public/sw.js absent; offline support is optional
       }
 
+      /* The build id is a digest of what the shell actually consists of, not a
+         timestamp. A timestamp changes on every build, and the browser treats
+         any byte-difference in sw.js as a new worker — so a rebuild that
+         produced identical output would still install a second copy of the
+         same app and ask the reader to update to it. Hashed filenames already
+         encode every change to the bundles; index.html is hashed alongside
+         them because it is the one shell file whose name never changes. */
+      let indexHtml = '';
+      try {
+        indexHtml = readFileSync(join(outDir, 'index.html'), 'utf8');
+      } catch {
+        /* no shell — the digest is then just the asset list */
+      }
+      const build = createHash('sha256')
+        .update(assets.join('\n'))
+        .update(indexHtml)
+        .digest('hex')
+        .slice(0, 12);
+
       const stamped = sw
-        .replace("'__BUILD__'", JSON.stringify(Date.now().toString(36)))
+        .replace("'__BUILD__'", JSON.stringify(build))
         .replace("['__ASSETS__']", JSON.stringify(assets));
 
       writeFileSync(swPath, stamped);
-      console.log(`sw.js: precaching ${assets.length} built assets`);
+      console.log(`sw.js: build ${build}, precaching ${assets.length} built assets`);
     },
   };
 }

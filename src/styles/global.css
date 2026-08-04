@@ -1098,6 +1098,34 @@ input[type='range']::-moz-range-thumb {
   animation: sheetup 300ms var(--ease-spring);
 }
 
+/* the same pill, offering the newer build — see src/pwa/update.ts */
+.toast.update {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding-right: var(--s3);
+  z-index: 400;
+}
+
+.update-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 var(--accent-soft);
+  animation: pulse 2.4s var(--ease-out) infinite;
+}
+
+.update-action {
+  padding: 5px var(--s3);
+  border-radius: var(--r-full);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
 /* a book that is in the account but not on this device */
 .cloud-badge {
   position: absolute;

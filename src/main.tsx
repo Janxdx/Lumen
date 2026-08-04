@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import { registerServiceWorker } from './pwa/update';
 import './styles/global.css';
 
 createRoot(document.getElementById('root')!).render(
@@ -13,14 +14,10 @@ createRoot(document.getElementById('root')!).render(
 document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false });
 
 /* Offline shell. Registered only in a production build so the dev server
-   isn't shadowed by a stale cache. */
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
-  window.addEventListener('load', () => {
-    void navigator.serviceWorker.register('/sw.js').catch(() => {
-      /* offline support is a bonus, not a requirement */
-    });
-  });
-}
+   isn't shadowed by a stale cache. The worker installs a new build but does
+   not activate it; registerServiceWorker keeps asking whether one is waiting
+   and UpdateBanner offers it. */
+if (import.meta.env.PROD) registerServiceWorker();
 
 /* Ask for persistent storage: without it Safari may evict IndexedDB — the
    imported books — after about a week of not opening the app. Granted

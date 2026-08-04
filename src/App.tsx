@@ -13,6 +13,7 @@ import { Device } from './ui/Device';
 import { Impressum } from './ui/Impressum';
 import { Ratings } from './ui/Ratings';
 import { Reader } from './ui/Reader';
+import { UpdateBanner } from './ui/UpdateBanner';
 import { IconAccount, IconDevice, IconLibrary, IconShelf, IconStats } from './ui/Icons';
 
 type Tab = 'library' | 'device' | 'shelf' | 'stats' | 'account';
@@ -162,6 +163,11 @@ export default function App() {
       )}
 
       {reading && <Reader bookId={reading} onClose={() => setReading(null)} />}
+
+      {/* Not while reading: the offer keeps until the book is closed, and a
+          pill sliding up over a page is exactly the interruption the reader
+          is built to avoid. */}
+      {!reading && <UpdateBanner />}
     </div>
   );
 }

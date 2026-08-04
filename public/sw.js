@@ -2,17 +2,31 @@
 
    Everything the app needs to boot is precached at install, so the first
    launch after a deploy is already offline-capable — the reader does not have
-   to have fetched each chunk once before. Navigations are network-first (with
-   a short timeout, so a flaky connection doesn't hang the splash) and fall
-   back to the cached shell. Hashed build assets are immutable: cache-first.
+   to have fetched each chunk once before. Books never touch this cache; they
+   live in IndexedDB.
 
-   Books never touch this cache — they live in IndexedDB. */
+   One cache per build, and a generation is only ever read as a whole. The
+   `index.html` in `soluna-<BUILD>` names exactly the hashed bundles that were
+   precached beside it, so serving a page out of it can never produce a shell
+   asking for a chunk that generation does not have. That is why navigations
+   read the cache rather than the network: the network's `index.html` belongs
+   to a *newer* generation and names assets this one never fetched, so caching
+   it here would leave a shell whose scripts only resolve while online — an
+   offline app that quietly stops being one.
+
+   Nothing here calls skipWaiting() on its own. A new worker installs, fills
+   its cache and then waits, because taking over early is what actually breaks
+   the app: the page that is open is running the *old* bundle, and the old
+   bundle still resolves chunks by their old hashed names — `tesseract.js` on
+   the first scan, for one. Activate deletes the old generation, and the
+   filenames are gone from the server too. So the swap happens on our own
+   terms: the page notices the waiting worker, offers it, and only a tap sends
+   SKIP_WAITING. See src/pwa/update.ts. */
 
 const BUILD = '__BUILD__'; // replaced at build time
 const ASSETS = ['__ASSETS__']; // replaced at build time
 
 const CACHE = `soluna-${BUILD}`;
-const NAV_TIMEOUT_MS = 2500;
 
 const SHELL = [
   '/',
@@ -29,9 +43,19 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
       .open(CACHE)
-      // one missing file must not fail the whole install
-      .then((c) => Promise.all(SHELL.map((url) => c.add(url).catch(() => undefined))))
-      .then(() => self.skipWaiting())
+      /* `cache: 'reload'` matters more than it looks. Without it the precache
+         is filled from the HTTP cache, which on a deploy can still be holding
+         the previous `index.html` — the new worker would then install a shell
+         from the build it is replacing and the update would appear to do
+         nothing. Hashed assets are immune, `index.html` is not. */
+      .then((c) =>
+        Promise.all(
+          SHELL.map((url) =>
+            // one missing file must not fail the whole install
+            c.add(new Request(url, { cache: 'reload' })).catch(() => undefined)
+          )
+        )
+      )
   );
 });
 
@@ -44,22 +68,11 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-/** network, but never hang: falls back once the timeout elapses */
-function fromNetwork(request, ms) {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('timeout')), ms);
-    fetch(request).then(
-      (response) => {
-        clearTimeout(timer);
-        resolve(response);
-      },
-      (err) => {
-        clearTimeout(timer);
-        reject(err);
-      }
-    );
-  });
-}
+/* The page asking to be upgraded now. This is the only path to skipWaiting(),
+   and it is reached only after somebody tapped. */
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') void self.skipWaiting();
+});
 
 self.addEventListener('fetch', (event) => {
   const request = event.request;
@@ -81,20 +94,22 @@ self.addEventListener('fetch', (event) => {
      the ordinary way. */
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/auth/')) return;
 
+  /* The worker script itself is never served from here. The browser's own
+     update check fetches it, and answering that from a cache is answering
+     "is there a new version?" with the old version — the app would never
+     update again. */
+  if (url.pathname === '/sw.js') return;
+
   if (request.mode === 'navigate') {
+    /* Cache-first, and the boot is therefore instant and identical online and
+       off. Freshness is not this handler's job — a newer build is picked up by
+       the update check in the page, which is the only thing that can swap
+       shell and chunks together. */
     event.respondWith(
-      fromNetwork(request, NAV_TIMEOUT_MS)
-        .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE).then((c) => c.put('/index.html', copy));
-          return response;
-        })
-        .catch(() =>
-          caches
-            .match('/index.html')
-            .then((r) => r ?? caches.match('/'))
-            .then((r) => r ?? Response.error())
-        )
+      caches
+        .match('/index.html', { cacheName: CACHE })
+        .then((cached) => cached ?? fetch(request))
+        .catch(() => caches.match('/').then((r) => r ?? Response.error()))
     );
     return;
   }
