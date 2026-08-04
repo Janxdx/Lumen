@@ -18,9 +18,11 @@ import { useRatings, rateableBooks, type Rateable } from '../store/ratings';
 import { useLibrary } from '../store/library';
 import { useDevice } from '../store/device';
 import { useEditions, type EditionSubject } from '../store/editions';
+import { useOwnCovers } from '../store/ownCovers';
 import type { TroubleKind } from '../meta/editions';
 import { useSettings } from '../store/settings';
-import { editionKey } from '../engine/edition';
+import { editionKey, type EditionData } from '../engine/edition';
+import { knowsAnything } from '../engine/spine';
 import {
   MOODS,
   SORTS,
@@ -49,6 +51,13 @@ const TROUBLE: Record<TroubleKind, string> = {
      here. Present so the map stays exhaustive. */
   server: 'The lookup service reported a problem.',
 };
+
+/** `EditionSubject` plus the library book it resolved to, purely so the
+    own-cover fallback below knows which `db.covers` row to read — the
+    catalogue lookup itself only ever sees the four fields it always saw. */
+interface RatingSubject extends EditionSubject {
+  bookId?: string;
+}
 
 export function Ratings() {
   const ratings = useRatings((s) => s.ratings);
@@ -85,10 +94,10 @@ export function Ratings() {
      The publisher and the language come from the EPUB when there is one —
      both beat the catalogue, because they describe the edition actually in
      hand rather than a best match for its title. */
-  const subjects = useMemo((): Map<string, EditionSubject> => {
+  const subjects = useMemo((): Map<string, RatingSubject> => {
     const lib = useLibrary.getState().books;
     const dev = useDevice.getState().books;
-    const out = new Map<string, EditionSubject>();
+    const out = new Map<string, RatingSubject>();
 
     for (const r of ratings) {
       const book = r.bookId ? lib.find((b) => b.id === r.bookId) : undefined;
@@ -97,7 +106,7 @@ export function Ratings() {
          reader shelf. */
       const device = r.deviceBookId ? dev.find((d) => d.id === r.deviceBookId) : undefined;
       const linked = device?.bookId ? lib.find((b) => b.id === device.bookId) : undefined;
-      const meta = (book ?? linked)?.meta;
+      const resolved = book ?? linked;
 
       out.set(r.id, {
         /* The rating's own title and author, not the book's. They are what
@@ -106,25 +115,58 @@ export function Ratings() {
            quietly lose its cover. */
         title: r.title,
         author: r.author,
-        ...(meta?.language ? { lang: meta.language } : {}),
-        ...(meta?.publisher ? { publisher: meta.publisher } : {}),
+        ...(resolved?.meta.language ? { lang: resolved.meta.language } : {}),
+        ...(resolved?.meta.publisher ? { publisher: resolved.meta.publisher } : {}),
+        ...(resolved ? { bookId: resolved.id } : {}),
       });
     }
     return out;
   }, [ratings]);
 
+  /* The own-cover fallback. `byId` from `useOwnCovers` so the wall re-renders
+     once an extraction lands. */
+  const ownCoverById = useOwnCovers((s) => s.byId);
+  const ensureOwnCover = useOwnCovers((s) => s.ensure);
+
+  /* Only for a book the catalogue has definitively said nothing about — a
+     row exists (the lookup ran) and `knowsAnything` is false — never for one
+     still waiting on a lookup, so this can't flash the own cover and then
+     the catalogue's a moment later. Reading `db.covers` and running the
+     palette extractor is local and instant, so unlike the catalogue fill
+     this doesn't need pacing; it is still gated on `shelfMode` so a book
+     never spends a canvas pass for a shelf nobody switched to. */
+  useEffect(() => {
+    if (shelfMode !== 'shelf') return;
+    for (const subject of subjects.values()) {
+      if (!subject.bookId) continue;
+      const row = byKey[editionKey(subject.title, subject.author)];
+      if (row && !knowsAnything(row.data) && !(subject.bookId in ownCoverById)) {
+        void ensureOwnCover(subject.bookId);
+      }
+    }
+  }, [shelfMode, subjects, byKey, ownCoverById, ensureOwnCover]);
+
   const extras = useMemo((): Record<string, SpineExtras> => {
     const out: Record<string, SpineExtras> = {};
     for (const [id, subject] of subjects) {
-      const row = byKey[editionKey(subject.title, subject.author)];
+      const key = editionKey(subject.title, subject.author);
+      const row = byKey[key];
+      const ownPalette = subject.bookId ? ownCoverById[subject.bookId] : undefined;
+      /* The book's own cover stands in only on a definitive miss — see the
+         effect above — and only when it actually had usable colour. */
+      const fallback: EditionData | undefined =
+        row && !knowsAnything(row.data) && ownPalette?.length
+          ? { key, palette: ownPalette }
+          : undefined;
+      const edition = fallback ?? row?.data;
       out[id] = {
-        ...(row ? { edition: row.data } : {}),
+        ...(edition ? { edition } : {}),
         ...(subject.publisher ? { publisher: subject.publisher } : {}),
         ...(subject.lang ? { language: subject.lang } : {}),
       };
     }
     return out;
-  }, [subjects, byKey]);
+  }, [subjects, byKey, ownCoverById]);
 
   /* Only fetched once the realistic shelf has actually been asked for.
      Looking every book up on the chance that somebody might switch would

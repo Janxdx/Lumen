@@ -190,7 +190,11 @@ export interface LookInput {
  * half the books were found would be a real shelf with a row of identical
  * grey blanks through it. Better that those keep the spine they had.
  */
-const knowsAnything = (e: EditionData): boolean =>
+/* Exported so a caller can tell a definitive catalogue miss (a row on disk
+   that knows nothing) apart from "not looked up yet" (no row at all) —
+   which is exactly the distinction the own-cover fallback needs. See
+   `src/meta/ownCover.ts`. */
+export const knowsAnything = (e: EditionData): boolean =>
   Boolean(e.palette?.length || e.pageCount || e.publisher || e.series || e.heightMm);
 
 export function spineLook(input: LookInput): SpineLook {
