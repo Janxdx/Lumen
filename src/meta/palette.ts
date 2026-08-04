@@ -88,42 +88,70 @@ export async function extractPalette(blob: Blob): Promise<Swatch[]> {
   }
 }
 
+/**
+ * Is this pixel paper or ink rather than colour?
+ *
+ * Near-white and near-black are dropped before bucketing: almost every
+ * cover has a white margin and black type, both would win on volume, and
+ * "this book is mostly paper" is true of all of them.
+ *
+ * The test is on the *lowest* channel, not the highest, and that
+ * distinction is the whole correctness of this function. White means every
+ * channel is high. A saturated red is (250, 40, 40) — its highest channel
+ * is as high as white's, so a test on the maximum throws away exactly the
+ * vivid covers this feature exists for, and quietly: the palette comes back
+ * empty, `groundFrom` returns null, and the spine falls back to the mood
+ * grey as though nothing had been found at all. Which is what shipped.
+ */
+export function isPaperOrInk(r: number, g: number, b: number): boolean {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  if (min > 242) return true; // white: every channel high
+  if (max < 26) return true; // black: every channel low
+  // unsaturated and at either extreme — a grey margin, a grey shadow
+  return max - min < 16 && (max > 220 || max < 40);
+}
+
 function quantize(data: Uint8ClampedArray): Swatch[] {
+  /* Two passes over the same pixels rather than one. The first ignores
+     paper and ink; the second, run only if the first found nothing, takes
+     everything. A cover that really is all cream — plenty of literary
+     paperbacks are — should come back cream rather than come back empty
+     and be drawn as though the lookup had failed. */
+  return bucket(data, true) ?? bucket(data, false) ?? [];
+}
+
+function bucket(data: Uint8ClampedArray, skipNeutrals: boolean): Swatch[] | null {
   const buckets = new Map<number, { r: number; g: number; b: number; n: number }>();
   let counted = 0;
 
   for (let i = 0; i < data.length; i += 4) {
-    const a = data[i + 3];
     // transparent corners are the frame, not the cover
-    if (a < 128) continue;
+    if (data[i + 3] < 128) continue;
 
     const r = data[i];
     const g = data[i + 1];
     const b = data[i + 2];
 
-    /* Near-white and near-black are dropped before bucketing. Almost every
-       cover has a white margin and black type, and both would win on
-       volume and tell you nothing — "this book is mostly paper" is true of
-       all of them. Put back at the end if nothing else survives. */
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-    const chroma = max - min;
-    if (max > 242 || max < 26 || (chroma < 16 && (max > 220 || max < 40))) continue;
+    if (skipNeutrals && isPaperOrInk(r, g, b)) continue;
 
     const key = ((r >> SHIFT) << (BITS * 2)) | ((g >> SHIFT) << BITS) | (b >> SHIFT);
-    const bucket = buckets.get(key);
-    if (bucket) {
-      bucket.r += r;
-      bucket.g += g;
-      bucket.b += b;
-      bucket.n++;
+    const found = buckets.get(key);
+    if (found) {
+      found.r += r;
+      found.g += g;
+      found.b += b;
+      found.n++;
     } else {
       buckets.set(key, { r, g, b, n: 1 });
     }
     counted++;
   }
 
-  if (!counted) return [];
+  /* A handful of surviving pixels is noise — an anti-aliasing halo around
+     black type on white — and averaging it gives a colour the cover does
+     not have. Treat it as nothing found and let the second pass answer. */
+  if (counted < 24) return null;
 
   return [...buckets.values()]
     .sort((x, y) => y.n - x.n)

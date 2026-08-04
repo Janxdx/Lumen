@@ -20,6 +20,28 @@ import { db, trimEditionCache, type EditionRecord } from '../db';
 import { editionKey, editionSlug, type EditionData } from '../engine/edition';
 import { extractPalette } from './palette';
 
+/**
+ * Which generation of this code wrote a cached row.
+ *
+ * Bump it whenever the *client's* processing of a lookup changes in a way
+ * that would give a different answer for the same catalogue data — a new
+ * palette extractor, a new field read off the response. Rows below it are
+ * treated as missing and fetched again.
+ *
+ * The server's own cache is untouched by this, so a re-fetch costs one
+ * round trip to our Worker and nothing to Open Library or Google. That is
+ * what makes throwing the local rows away cheap enough to be the default
+ * answer, rather than something to agonise over.
+ *
+ *   1  the first version
+ *   2  the palette's white test used the highest channel instead of the
+ *      lowest, so every saturated colour was discarded as paper and vivid
+ *      covers came back with no palette at all
+ */
+export const EXTRACT_VERSION = 2;
+
+const stale = (row: EditionRecord): boolean => (row.v ?? 1) < EXTRACT_VERSION;
+
 /* ── the network ───────────────────────────────────────────────────── */
 
 /** Set once the server says no. See `paused` below. */
@@ -199,7 +221,7 @@ export async function ensureEdition(
   const key = editionKey(title, author);
 
   const existing = await db.editions.get(key);
-  if (existing) {
+  if (existing && !stale(existing)) {
     /* Touch, but don't await it — this is on the render path and the LRU
        stamp being a moment late costs nothing. */
     void db.editions.update(key, { usedAt: Date.now() }).catch(() => {});
@@ -254,6 +276,7 @@ async function load(
   const now = Date.now();
   const record: EditionRecord = {
     key,
+    v: EXTRACT_VERSION,
     data: palette ? { ...data, palette } : data,
     ...(cover ? { cover, coverType } : {}),
     fetchedAt: now,
@@ -307,7 +330,8 @@ export async function fillShelf(
     if (!book.title.trim()) continue;
 
     const key = editionKey(book.title, book.author);
-    if (await db.editions.get(key)) continue;
+    const have = await db.editions.get(key);
+    if (have && !stale(have)) continue;
 
     const row = await ensureEdition(book.title, book.author, book.lang);
     if (row) {

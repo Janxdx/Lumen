@@ -128,6 +128,27 @@ and `writeCache` catch "no such table", warn with the command that fixes
 it, and carry on uncached. `GOOGLE_BOOKS_KEY` is an optional secret —
 unkeyed requests work; set it if lookups start coming back empty.
 
+**The palette's white test is on the lowest channel, not the highest.**
+White is every channel high; a saturated red is (250, 40, 40) and its
+highest channel is as high as white's. Testing the maximum discarded
+exactly the vivid covers the feature exists for — and silently, because an
+empty palette is indistinguishable from a failed lookup, so the spine came
+out mood-grey as though nothing had been found. `isPaperOrInk` is exported
+purely so `tests/edition.test.mts` can pin it. There is a second pass that
+takes every pixel when the first finds nothing, so an all-cream literary
+paperback comes back cream rather than empty.
+
+`EXTRACT_VERSION` in `src/meta/editions.ts` is how a fix like that reaches
+rows already cached: bump it and older rows are treated as absent. Cheap
+because the server's cache is untouched, so a re-fetch costs one call to
+our own Worker and nothing to anybody else's service.
+
+**No `langRestrict` on the Google query.** It is a hard filter and the
+language it would be given is often a guess — a book logged by hand has no
+EPUB to declare one, so the client falls back to `navigator.language`, and
+an English novel on a German iPad was being searched for among German
+editions only. The preference survives as the small bonus in `score`.
+
 **The shelf tells you why it is empty.** Failing soft is right — a book
 without a cover still draws — but the first cut failed soft *and* silently,
 so signed out, no endpoint, offline, rate-limited and a 500 all looked

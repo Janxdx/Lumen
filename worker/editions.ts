@@ -229,7 +229,13 @@ async function fromGoogle(env: Env, want: Want): Promise<EditionData | null> {
     maxResults: '8',
     printType: 'books',
   });
-  if (want.lang) q.set('langRestrict', want.lang.slice(0, 2));
+  /* Deliberately no `langRestrict`. It is a hard filter, and the language
+     it would be given is frequently a guess: a book logged by hand has no
+     EPUB to declare one, so the client falls back to the browser's. An
+     English novel on a German iPad would then be searched for among German
+     editions only, and the right book is excluded outright. The language
+     preference survives as the small bonus in `score`, which is the same
+     idea applied softly — prefer the reader's edition, never require it. */
   if (env.GOOGLE_BOOKS_KEY) q.set('key', env.GOOGLE_BOOKS_KEY);
 
   const data = await getJson<{ items?: GVolume[] }>(

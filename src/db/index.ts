@@ -181,6 +181,14 @@ export interface PassageIndexRecord {
 export interface EditionRecord {
   /** `editionKey(title, author)` from engine/edition.ts */
   key: string;
+  /** Which build of the client wrote this row — see `EXTRACT_VERSION` in
+      meta/editions.ts. A cached row is only as good as the code that made
+      it, and the palette extractor has already shipped one bug that made
+      every vivid cover come back with no colours at all. Because this
+      table is a cache and nothing else, a row from an older extractor can
+      simply be treated as absent and fetched again; the alternative is a
+      fix that only helps books rated after it. */
+  v?: number;
   data: EditionData;
   /** cover bytes, held raw for the reason spelled out on CoverRecord above */
   cover?: ArrayBuffer;

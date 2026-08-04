@@ -11,6 +11,7 @@ import {
   spineDirection, thicknessMm,
 } from '../src/engine/edition.ts';
 import { groundFrom, inkOn, luma, shade, spineLook } from '../src/engine/spine.ts';
+import { isPaperOrInk } from '../src/meta/palette.ts';
 import type { RatingRecord } from '../src/engine/rating.ts';
 
 let fails = 0;
@@ -165,6 +166,26 @@ eq('a strong first colour keeps its place',
   groundFrom(['#8a3324', '#f4f1ea', '#221c14']), '#8a3324');
 eq('no palette means no ground', groundFrom(undefined), null);
 eq('an empty palette means no ground', groundFrom([]), null);
+
+/* ── which pixels are the cover ─────────────────────────────────────
+   The palette drops paper and ink before it counts anything. The test has
+   to be on the *lowest* channel: white is every channel high, while a
+   saturated red has one channel just as high as white's. Testing the
+   highest threw away exactly the vivid covers the feature exists for, and
+   silently — an empty palette is indistinguishable from a failed lookup,
+   so the spine came out mood-grey as though nothing had been found. */
+
+ok('white is paper', isPaperOrInk(255, 255, 255));
+ok('near-white is paper', isPaperOrInk(250, 248, 245));
+ok('cream is paper', isPaperOrInk(246, 244, 243));
+ok('black is ink', isPaperOrInk(8, 8, 10));
+
+ok('a vivid red is not paper', !isPaperOrInk(250, 40, 40));
+ok('a vivid yellow is not paper', !isPaperOrInk(242, 201, 0));
+ok('Reclam yellow survives', !isPaperOrInk(0xf2, 0xc9, 0x00));
+ok('Penguin orange survives', !isPaperOrInk(0xe8, 0x72, 0x1c));
+ok('a deep blue is not ink', !isPaperOrInk(29, 42, 58));
+ok('a mid grey is neither', !isPaperOrInk(128, 128, 128));
 
 /* ── the two shelves ────────────────────────────────────────────────── */
 
