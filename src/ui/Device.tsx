@@ -486,7 +486,7 @@ function AddSheet({
               />
             </>
           )}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 12 }}>
             <Field
               label="Pages on the reader"
               inputMode="numeric"
@@ -502,7 +502,7 @@ function AddSheet({
               placeholder="0"
             />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 12 }}>
             <Field
               label="Body starts on page"
               inputMode="numeric"
@@ -1059,7 +1059,7 @@ function ManualForm({
     <div className="panel" style={{ marginTop: 16 }}>
       <h3>Log a session you didn't time</h3>
       <div className="auth-form">
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 12 }}>
           <Field
             label="Started"
             type="datetime-local"
@@ -1073,7 +1073,7 @@ function ManualForm({
             onChange={(e) => setMinutes(e.currentTarget.value.replace(/\D/g, ''))}
           />
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 12 }}>
           <Field
             label="From page"
             inputMode="numeric"
@@ -1153,7 +1153,7 @@ function EditForm({
           value={author}
           onChange={(e) => setAuthor(e.currentTarget.value)}
         />
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 12 }}>
           <Field
             label="Total pages"
             inputMode="numeric"
@@ -1168,7 +1168,7 @@ function EditForm({
             onChange={(e) => setStartPage(e.currentTarget.value.replace(/\D/g, ''))}
           />
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 12 }}>
           <Field
             label="Currently on page"
             inputMode="numeric"
