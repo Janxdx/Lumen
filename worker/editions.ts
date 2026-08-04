@@ -295,136 +295,134 @@ function googleCoverUrl(volumeId: string): string {
   return `https://books.google.com/books/content?id=${encodeURIComponent(volumeId)}&printsec=frontcover&img=1&zoom=3`;
 }
 
-/* ── Wikipedia, by way of Wikidata ─────────────────────────────────
+/* ── Wikipedia ─────────────────────────────────────────────────────
 
-   Asking a language Wikipedia directly for a title is the obvious approach
-   and it is wrong: "Der Prozess" is a Kafka novel, an Orson Welles film and
-   a disambiguation page, and the search API is happy to hand back any of
-   them. Wikidata knows which one is a book, because being a book is a
-   statement on the item (P31), and it knows what that same book's article
-   is called in every other language, because that is what sitelinks are.
+   This went through Wikidata first, on the reasoning that being a book is
+   a statement on the item (P31) and that sitelinks name the same book's
+   article in every language — so you could find the work, check it really
+   is a novel, and follow the link into the reader's language. Sound, and
+   it does not work, for a dull reason: `wbsearchentities` is a *prefix*
+   search over labels and aliases. The German article for Der Prozess is
+   titled "Der Process", so the query diverged at the eighth character and
+   matched nothing at all. Kafka is not an edge case here; German
+   orthography reformed in 1996 and half the canon has two spellings.
 
-   So: find the item, check it is a written work, follow the sitelink into
-   the reader's language. One extra round trip, and it is the difference
-   between a summary of the novel and a summary of the 1962 film. */
+   So: search the language Wikipedia itself, which is a full-text index and
+   forgiving of exactly that, then verify what came back. The verification
+   is the part that matters, because a title search alone will hand you the
+   1962 Orson Welles film, or a disambiguation page, as happily as the
+   novel.
 
-/* P31 values that mean "this is a book of some kind". Deliberately broad —
-   a poetry collection and a play are both things somebody rates here. */
-const WORK_CLASSES = new Set([
-  'Q571', // book
-  'Q7725634', // literary work
-  'Q47461344', // written work
-  'Q8261', // novel
-  'Q49084', // short story
-  'Q1279564', // short story collection
-  'Q25379', // play
-  'Q37484', // epic poem
-  'Q49085', // poetry collection
-  'Q8274', // manga
-  'Q1004', // comic book
-]);
+   Two checks do it. The author has to be named in the article's opening —
+   an article about a book always names its author in the first sentence.
+   And the one-line description, which the REST summary carries from
+   Wikidata, decides between the novel and the film adaptation that also
+   names Kafka in its first line. */
 
-/** Wikidata's class for a disambiguation page. An item that is one is never
-    the answer, however well its label matches. */
-const DISAMBIGUATION = 'Q4167410';
-
-interface WdSearchHit {
-  id: string;
-  label?: string;
-  description?: string;
+interface WpSearchHit {
+  title?: string;
 }
 
-interface WdEntity {
-  claims?: Record<string, { mainsnak?: { datavalue?: { value?: { id?: string } } } }[]>;
-  sitelinks?: Record<string, { title?: string }>;
-  labels?: Record<string, { value?: string }>;
+interface WpSummary {
+  title?: string;
+  description?: string;
+  extract?: string;
+  type?: string;
+  content_urls?: { desktop?: { page?: string } };
+}
+
+/* Words that mean "this article is about a written work", and words that
+   mean "this is the film of it". Both lists are matched against the
+   Wikidata description, which is short, structured and written to exactly
+   this purpose — "Roman von Franz Kafka", "1962 film by Orson Welles". */
+const WORK_WORDS = /\b(roman|novel|book|buch|erzahlung|novelle|werk|literary|literatur|kurzgeschichte|drama|theaterstuck|gedicht|poem|play|trilogie|trilogy|saga|memoir|sachbuch|essay)\b/;
+const NOT_WORK_WORDS = /\b(film|movie|opera|oper|serie|series|album|song|lied|videospiel|video game|musical|band|painting|gemalde)\b/;
+
+async function summaryFor(lang: string, title: string): Promise<WpSummary | null> {
+  return getJson<WpSummary>(
+    `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`
+  );
+}
+
+/** Search one language Wikipedia and return the best verified summary. */
+async function wikipediaIn(lang: string, want: Want): Promise<WikiSummary | null> {
+  const search = await getJson<{ query?: { search?: WpSearchHit[] } }>(
+    `https://${lang}.wikipedia.org/w/api.php?${new URLSearchParams({
+      action: 'query',
+      list: 'search',
+      /* Title and author together. The author is what separates the novel
+         from the seventeen other things called Der Prozess, and a
+         full-text index weights both. */
+      srsearch: `${want.title} ${want.author}`.trim(),
+      srlimit: '5',
+      format: 'json',
+      origin: '*',
+    })}`
+  );
+
+  const hits = (search?.query?.search ?? [])
+    .map((h) => h.title)
+    .filter((t): t is string => Boolean(t));
+  if (!hits.length) return null;
+
+  /* The author's surname, which is the longest word in the name often
+     enough to be a decent guess and is what an opening sentence uses.
+     Empty when there is no author, in which case the check is skipped —
+     a book with no author on the shelf is rare and not worth refusing. */
+  const surname = normalizeAuthor(want.author)
+    .split(' ')
+    .sort((a, b) => b.length - a.length)[0];
+
+  let best: { summary: WpSummary; s: number } | null = null;
+
+  for (const title of hits.slice(0, 4)) {
+    const summary = await summaryFor(lang, title);
+    if (!summary?.extract || summary.type === 'disambiguation') continue;
+
+    const description = normalize(summary.description ?? '');
+    const opening = normalize(summary.extract.slice(0, 400));
+
+    /* An article about a book names its author in the first sentence. An
+       article that never mentions them is about something else, however
+       well the title matched. */
+    if (surname && !opening.includes(surname) && !description.includes(surname)) continue;
+
+    let s = wordOverlap(normalizeTitle(want.title), normalizeTitle(summary.title ?? ''));
+    if (WORK_WORDS.test(description)) s += 0.6;
+    /* The film of the book mentions the author too, and often matches the
+       title exactly. This is the check that keeps Orson Welles off the
+       rating sheet. */
+    if (NOT_WORK_WORDS.test(description)) s -= 0.8;
+
+    if (!best || s > best.s) best = { summary, s };
+  }
+
+  if (!best || best.s <= 0) return null;
+
+  const title = best.summary.title ?? hits[0];
+  return {
+    lang,
+    title,
+    /* Two or three sentences. The REST summary is already the lead
+       paragraph, but a lead paragraph on a famous novel runs to eight
+       lines, which is longer than anybody reads on a rating card. */
+    extract: trimSentences(best.summary.extract ?? '', 3),
+    url:
+      best.summary.content_urls?.desktop?.page ??
+      `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(title)}`,
+  };
 }
 
 async function fromWikipedia(want: Want): Promise<WikiSummary | null> {
-  const lang = want.lang.slice(0, 2) || 'en';
+  const lang = want.lang.slice(0, 2).toLowerCase() || 'en';
 
-  const search = await getJson<{ search?: WdSearchHit[] }>(
-    `https://www.wikidata.org/w/api.php?${new URLSearchParams({
-      action: 'wbsearchentities',
-      search: want.title,
-      language: lang,
-      uselang: lang,
-      type: 'item',
-      limit: '8',
-      format: 'json',
-      origin: '*',
-    })}`
-  );
-  const hits = search?.search ?? [];
-  if (!hits.length) return null;
+  const own = await wikipediaIn(lang, want);
+  if (own) return own;
 
-  /* The description is the cheap signal and it is a good one: Wikidata
-     describes a novel as "Roman von Franz Kafka", so an author name
-     appearing there is strong evidence without a second lookup for the
-     author's own item. Ranked here, verified against P31 below. */
-  const wantAuthor = normalizeAuthor(want.author);
-  const ranked = [...hits].sort((a, b) => descScore(b) - descScore(a));
-  function descScore(h: WdSearchHit): number {
-    const d = normalize(h.description ?? '');
-    let s = wordOverlap(normalizeTitle(want.title), normalizeTitle(h.label ?? ''));
-    if (wantAuthor && d && wordOverlap(wantAuthor, d) > 0.5) s += 0.5;
-    return s;
-  }
-
-  const ids = ranked.slice(0, 5).map((h) => h.id);
-  const entities = await getJson<{ entities?: Record<string, WdEntity> }>(
-    `https://www.wikidata.org/w/api.php?${new URLSearchParams({
-      action: 'wbgetentities',
-      ids: ids.join('|'),
-      props: 'claims|sitelinks',
-      format: 'json',
-      origin: '*',
-    })}`
-  );
-  if (!entities?.entities) return null;
-
-  for (const id of ids) {
-    const e = entities.entities[id];
-    if (!e) continue;
-    const classes = (e.claims?.P31 ?? [])
-      .map((c) => c.mainsnak?.datavalue?.value?.id)
-      .filter((v): v is string => Boolean(v));
-    if (classes.includes(DISAMBIGUATION)) continue;
-    if (!classes.some((c) => WORK_CLASSES.has(c))) continue;
-
-    /* The reader's language if the article exists there, English if not.
-       Falling back is better than an empty card, and the summary carries
-       the language it is actually in so the sheet can say so. */
-    const site =
-      e.sitelinks?.[`${lang}wiki`]?.title ??
-      (lang === 'en' ? undefined : e.sitelinks?.enwiki?.title);
-    if (!site) continue;
-    const gotLang = e.sitelinks?.[`${lang}wiki`]?.title ? lang : 'en';
-
-    const summary = await getJson<{
-      extract?: string;
-      title?: string;
-      type?: string;
-      content_urls?: { desktop?: { page?: string } };
-    }>(
-      `https://${gotLang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(site)}`
-    );
-    if (!summary?.extract || summary.type === 'disambiguation') continue;
-
-    return {
-      lang: gotLang,
-      title: summary.title ?? site,
-      /* Two or three sentences. The REST summary is already the lead
-         paragraph, but a lead paragraph on a famous novel can run to eight
-         lines, which is longer than anybody reads on a rating card. */
-      extract: trimSentences(summary.extract, 3),
-      url:
-        summary.content_urls?.desktop?.page ??
-        `https://${gotLang}.wikipedia.org/wiki/${encodeURIComponent(site)}`,
-    };
-  }
-
-  return null;
+  /* English as a fallback, because an article the reader can read beats an
+     empty card — and the summary carries the language it is actually in,
+     so the sheet can say why it is not German. */
+  return lang === 'en' ? null : wikipediaIn('en', want);
 }
 
 function trimSentences(text: string, max: number): string {

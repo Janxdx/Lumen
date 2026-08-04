@@ -96,6 +96,18 @@ the precision.
 protects somebody else's service rather than ours. The client paces itself
 at one lookup a second and stops on a 429, picking up where it left off.
 
+**The Wikipedia lookup does not go through Wikidata**, though the first cut
+did and the reasoning was good — being a book is a P31 statement, and
+sitelinks name the same work's article in every language. It failed for a
+dull reason: `wbsearchentities` is a *prefix* search over labels, and the
+German article for Der Prozess is titled "Der Process", so the query
+diverged at the eighth character and matched nothing. German orthography
+reformed in 1996; half the canon has two spellings. It now searches the
+language Wikipedia's full-text index and verifies the hit instead — the
+author must be named in the opening, and the Wikidata one-line description
+decides between the novel and the 1962 Orson Welles film, which also names
+Kafka in its first sentence.
+
 **`/api/lookup` is a POST although it reads.** It shipped as a GET and that
 was wrong: GETs are exempt from `requireSameOrigin` because they are
 assumed to change nothing, and the session cookie is `SameSite=Lax`, which
