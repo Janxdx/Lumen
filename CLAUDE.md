@@ -10,9 +10,14 @@ Before committing on `develop`, run `npm run typecheck`, `npm test` and
 `npm run build`. All three pass today, so a failure is something you just
 introduced.
 
-# Current state (2026-08-02)
+# Current state (2026-08-04)
 
-`develop` is ahead of `main` (`3537cca`) by:
+Everything listed below has since reached `origin/main` (`d2c2d34`) — the
+sections are kept because they record *why*, not *what*. `develop` is ahead of
+it by the reading-pace estimate (`5c95f9e`) and by **the PWA update path**
+(below).
+
+Sections that are now history rather than pending work:
 
 - `82331f8` — the Worker names the one 500 that means "your D1 schema is out
   of date" instead of hiding it behind "Something went wrong."
@@ -20,6 +25,46 @@ introduced.
 - **rate limiting across the whole API** (below).
 - **Supabase removed; D1 schema now deploys itself** (below).
 - **renamed from Lumen to Soluna** (below).
+
+## The PWA update path
+
+The offline shell used to call `skipWaiting()` in `install` and delete every
+other cache in `activate`. That meant a new worker seized the page that was
+already open — a page running the *previous* bundle, which still resolves its
+lazy chunks by their old hashed names. `tesseract.js` on the first scan is the
+one that bites. Those filenames were just dropped from the cache and are gone
+from the server too, so the running session breaks and only a reload fixes it.
+Meanwhile nothing ever called `registration.update()`, so an iPad PWA that
+stays resident for days never checked for a new build in the first place: the
+app could both break on update *and* fail to notice one.
+
+Now the worker installs, precaches and waits. `src/pwa/update.ts` polls
+(`updateViaCache: 'none'`, on `visibilitychange` and hourly), `UpdateBanner`
+offers the waiting build as a pill, and only a tap posts `SKIP_WAITING`. The
+reload is driven by `controllerchange` behind a one-shot guard — posting and
+reloading together races the swap, and reloading a page the new worker has not
+claimed yet just re-runs the old one. The banner is suppressed while a book is
+open; the offer keeps.
+
+Three points worth not re-deriving:
+
+- **Navigations are cache-first now, not network-first.** A cache generation
+  is self-consistent: the `index.html` in `soluna-<BUILD>` names exactly the
+  hashed bundles precached beside it. The network's `index.html` belongs to a
+  newer generation, so storing it here leaves a shell whose scripts only
+  resolve while online. Freshness is the update check's job, not the fetch
+  handler's.
+- The precache uses `cache: 'reload'`. Without it `index.html` can be filled
+  from the HTTP cache — the new worker installs the shell it is replacing and
+  the update visibly does nothing. Hashed assets are immune; `index.html` is
+  not.
+- `BUILD` is a sha256 of the asset list plus `index.html`, not `Date.now()`.
+  Any byte-difference in `sw.js` is a new worker to the browser, so a
+  timestamp asked the reader to update to a bit-identical app after every
+  rebuild. `public/_headers` already sends `no-cache` for `/sw.js` and
+  `/index.html`; the registration option is the belt to that suspenders.
+
+No schema change, so `npm run db:local` is not needed.
 
 ## Renamed from Lumen to Soluna
 

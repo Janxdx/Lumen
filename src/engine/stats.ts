@@ -154,6 +154,77 @@ export function wpmTrend(sessions: Session[]): number[] {
     .map((s) => wpm(s.words, s.ms));
 }
 
+/* ── reading pace and projections ───────────────────────────────── */
+
+/** Used only when there is no history at all, and always labelled as a guess. */
+export const DEFAULT_WPM = 250;
+
+/** A session long enough to say something about how fast you read. */
+const paceUsable = (s: Session): boolean => s.ms > 60_000 && s.words > 100;
+
+/**
+ * Words per minute you actually read at, weighted towards recent sessions.
+ *
+ * `totals().avgWpm` answers a different question — it is the lifetime
+ * average, and a year of slower reading drowns out this month. A projection
+ * wants the pace you are on *now*, so each session's weight halves every
+ * `halfLifeDays`. Sessions too short to mean anything are dropped rather
+ * than allowed to swing it, the same rule `pagesPerHour` uses on the device
+ * side; the two are the same idea measured in different units.
+ */
+export function recentWpm(sessions: Session[], halfLifeDays = 14): number {
+  const usable = sessions.filter(paceUsable);
+  if (!usable.length) return 0;
+
+  const now = Date.now();
+  let words = 0;
+  let minutes = 0;
+  for (const s of usable) {
+    const weight = Math.pow(0.5, (now - s.start) / 86_400_000 / halfLifeDays);
+    words += s.words * weight;
+    minutes += (s.ms / 60_000) * weight;
+  }
+  return minutes > 0 ? Math.round(words / minutes) : 0;
+}
+
+export interface Pace {
+  /** words per minute to project with */
+  wpm: number;
+  /** false when there was no usable history and `wpm` is `DEFAULT_WPM` */
+  measured: boolean;
+  /** true when the number came from this book alone */
+  ownBook: boolean;
+}
+
+/**
+ * The pace to project a finishing time from.
+ *
+ * A book's own sessions win when there are enough of them: dense non-fiction
+ * and a thriller are not read at the same speed, and an estimate that mixes
+ * them is wrong for both. Below that threshold a single slow evening would
+ * dominate, so the whole library is the steadier answer, and with no history
+ * at all the estimate falls back to a stated 250 wpm rather than pretending
+ * to know.
+ */
+export function readingPace(sessions: Session[], bookId?: string): Pace {
+  if (bookId) {
+    const own = sessions.filter((s) => s.bookId === bookId);
+    if (own.filter(paceUsable).length >= 3) {
+      const w = recentWpm(own);
+      if (w > 0) return { wpm: w, measured: true, ownBook: true };
+    }
+  }
+  const all = recentWpm(sessions);
+  if (all > 0) return { wpm: all, measured: true, ownBook: false };
+  return { wpm: DEFAULT_WPM, measured: false, ownBook: false };
+}
+
+/** How long `words` take at `wpm`, in ms. */
+export function timeForWords(words: number, wpm: number): number {
+  if (words <= 0 || wpm <= 0) return 0;
+  return Math.round((words / wpm) * 60_000);
+}
+
 /* ── formatting ─────────────────────────────────────────────────── */
 
 export function formatDuration(ms: number, long = false): string {
@@ -163,6 +234,18 @@ export function formatDuration(ms: number, long = false): string {
   const m = minutes % 60;
   if (long) return m ? `${h} hr ${m} min` : `${h} hr`;
   return m ? `${h}h ${m}m` : `${h}h`;
+}
+
+/**
+ * A remaining time, for anywhere a countdown is on screen.
+ *
+ * `formatDuration` rounds to the nearest minute, which reads as "0m left"
+ * for the last half minute of a chapter — the one moment the number is most
+ * visibly wrong. Anything under a minute says so instead.
+ */
+export function formatEta(ms: number): string {
+  if (ms < 45_000) return '<1m';
+  return formatDuration(ms);
 }
 
 export function formatCount(n: number): string {

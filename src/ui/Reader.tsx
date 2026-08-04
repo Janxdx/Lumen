@@ -15,6 +15,7 @@ import { gutterFor, measure, pageOf, scrollToPage, type Geometry } from '../engi
 import { Pacer } from '../engine/pacer';
 import { useSettings } from '../store/settings';
 import { useLibrary } from '../store/library';
+import { formatEta, readingPace, timeForWords } from '../engine/stats';
 import { useSync } from '../sync/sync';
 import { Sheet } from './Sheet';
 import { ReaderSettings } from './ReaderSettings';
@@ -598,8 +599,31 @@ export function Reader({ bookId, onClose }: { bookId: string; onClose: () => voi
   const chapterTitle =
     book?.toc.slice().reverse().find((t) => t.spineIndex >= 0 && t.spineIndex <= spineIndex)
       ?.label ?? `Chapter ${spineIndex + 1}`;
-  const remainingWords = book ? Math.max(0, book.totalWords - globalWords(spineIndex, wordIndex)) : 0;
-  const minutesLeft = Math.round(remainingWords / Math.max(120, settings.pacer.wpm));
+
+  /* ── how much longer ─────────────────────────────────────────────
+     Two numbers, because they answer different questions: whether there is
+     time for the rest of this chapter before bed, and how far off the end
+     of the book is.
+
+     The pace is measured, not the pacer's setting — the old estimate read
+     off the WPM slider, so dragging it to 900 claimed you'd finish War and
+     Peace tonight. It is sampled once per book rather than subscribed to,
+     so a session being written back never re-renders the reader (the same
+     reason `saveProgress` and `recordSession` are pulled out as selectors
+     above). While the pacer *is* running it does set the tempo, so it wins
+     for as long as it runs. */
+  const measured = useMemo(() => readingPace(useLibrary.getState().sessions, bookId), [bookId]);
+  const paceWpm = playing ? settings.pacer.wpm : measured.wpm;
+
+  const wordsRead = book ? globalWords(spineIndex, wordIndex) : 0;
+  const remainingWords = book ? Math.max(0, book.totalWords - wordsRead) : 0;
+  /* `globalWords(spineIndex + 1, 0)` is the end of this chapter: the words
+      of every chapter before the next one. Past the last chapter it is the
+      whole book, which is the right answer there too. */
+  const chapterWordsLeft = book ? Math.max(0, globalWords(spineIndex + 1, 0) - wordsRead) : 0;
+  const bookLeft = formatEta(timeForWords(remainingWords, paceWpm));
+  const chapterLeft = formatEta(timeForWords(chapterWordsLeft, paceWpm));
+  const lastChapter = book ? spineIndex >= book.spine.length - 1 : false;
 
   const columnClass = [
     'columns',
@@ -709,7 +733,7 @@ export function Reader({ bookId, onClose }: { bookId: string; onClose: () => voi
               onChange={(e) => goChapter(Number(e.target.value), 0, false, true)}
             />
             <span className="num" style={{ minWidth: 96, textAlign: 'right' }}>
-              {page + 1}/{pages} · {minutesLeft}m left
+              {page + 1}/{pages} · {bookLeft} left
             </span>
           </div>
           <div
@@ -720,7 +744,7 @@ export function Reader({ bookId, onClose }: { bookId: string; onClose: () => voi
               textAlign: 'center',
             }}
           >
-            {chapterTitle}
+            {chapterTitle} · {chapterLeft} {lastChapter ? 'to the end' : 'to next chapter'}
           </div>
         </div>
       </div>

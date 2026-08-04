@@ -22,7 +22,7 @@ import {
   IconTrash,
 } from './Icons';
 import { ScanPanel } from './ScanSheet';
-import { formatCount, formatDuration, relativeDate, wpm } from '../engine/stats';
+import { formatCount, formatDuration, formatEta, relativeDate, wpm } from '../engine/stats';
 import {
   pageToPercent,
   pagesPerHour,
@@ -235,6 +235,10 @@ export function Device() {
               const own = byBook[b.id] ?? [];
               const percent = pageToPercent(b, b.currentPage);
               const linked = library.find((x) => x.id === b.bookId);
+              /* Same projection the book's own sheet shows, on the shelf
+                 itself: how long is left is the thing you want to know
+                 while choosing what to pick up, not after opening it. */
+              const left = remaining(b, b.currentPage, own);
               return (
                 <div
                   key={b.id}
@@ -264,6 +268,11 @@ export function Device() {
                       </div>
                       <div className="progress-rail">
                         <i style={{ width: `${percent * 100}%` }} />
+                      </div>
+                      <div className="a" style={{ marginTop: 4 }}>
+                        {left.ms != null
+                          ? `${formatEta(left.ms)} left`
+                          : `${left.pages} pages left`}
                       </div>
                     </div>
                   </button>

@@ -199,10 +199,11 @@ body::after {
   /* On a phone `--safe-b` already clears the home indicator by itself —
      stacking the full `--s5` gap from the iPad layout on top of that pushes
      the bar noticeably higher than it needs to sit, into where a sheet's own
-     bottom controls live. A smaller gap here still keeps it clear of the
-     indicator without floating so far up the screen. */
+     bottom controls live. `--s2` on top of that was still floating higher
+     than it reads as intentional on an iPhone, so this only adds a few
+     pixels of daylight above the indicator rather than a full spacing step. */
   .tabbar {
-    bottom: calc(var(--safe-b) + var(--s2));
+    bottom: calc(var(--safe-b) + var(--s1));
   }
   .tabbar button {
     padding: 0 var(--s3);
@@ -1096,6 +1097,34 @@ input[type='range']::-moz-range-thumb {
   font-weight: 540;
   box-shadow: var(--shadow-2);
   animation: sheetup 300ms var(--ease-spring);
+}
+
+/* the same pill, offering the newer build — see src/pwa/update.ts */
+.toast.update {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding-right: var(--s3);
+  z-index: 400;
+}
+
+.update-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 var(--accent-soft);
+  animation: pulse 2.4s var(--ease-out) infinite;
+}
+
+.update-action {
+  padding: 5px var(--s3);
+  border-radius: var(--r-full);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 /* a book that is in the account but not on this device */
