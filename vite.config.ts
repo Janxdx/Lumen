@@ -38,7 +38,12 @@ function serviceWorkerAssets(): Plugin {
          produced identical output would still install a second copy of the
          same app and ask the reader to update to it. Hashed filenames already
          encode every change to the bundles; index.html is hashed alongside
-         them because it is the one shell file whose name never changes. */
+         them because it is the one shell file whose name never changes.
+         `sw` is in there for the same reason and is easy to forget: a release
+         that only fixes the worker leaves the assets untouched, so without it
+         the new worker would name its cache after the generation it is
+         replacing — sharing a cache with the code it exists to supersede,
+         and skipping it when it looks for one. */
       let indexHtml = '';
       try {
         indexHtml = readFileSync(join(outDir, 'index.html'), 'utf8');
@@ -48,6 +53,7 @@ function serviceWorkerAssets(): Plugin {
       const build = createHash('sha256')
         .update(assets.join('\n'))
         .update(indexHtml)
+        .update(sw)
         .digest('hex')
         .slice(0, 12);
 

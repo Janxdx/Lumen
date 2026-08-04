@@ -28,9 +28,18 @@ const ASSETS = ['__ASSETS__']; // replaced at build time
 
 const CACHE = `soluna-${BUILD}`;
 
+/* The shell document is fetched from `/`, never from `/index.html`.
+
+   Cloudflare's asset router runs `html_handling: auto-trailing-slash`, so
+   `/index.html` answers 301 → `/`. `cache.add()` follows that and stores the
+   final response with its `redirected` flag set, and a response carrying that
+   flag may not be returned for a navigation — WebKit refuses the whole page
+   with "Response served by service worker has redirections". `/` itself does
+   not redirect, so it is the only URL the shell is ever read from. */
+const SHELL_DOC = '/';
+
 const SHELL = [
-  '/',
-  '/index.html',
+  SHELL_DOC,
   '/manifest.webmanifest',
   '/icon-180.png',
   '/icon-192.png',
@@ -39,23 +48,57 @@ const SHELL = [
   ...ASSETS.filter((a) => !a.startsWith('__')),
 ];
 
+/* Rebuilding a response from its body clears the `redirected` flag — the flag
+   is a property of the Response object, not of anything in the payload. Cheap
+   insurance in case a future route learns to redirect. */
+function flatten(res) {
+  if (!res || !res.redirected) return res;
+  return new Response(res.body, {
+    status: res.status,
+    statusText: res.statusText,
+    headers: res.headers,
+  });
+}
+
+/* `cache: 'reload'` matters more than it looks. Without it the precache is
+   filled from the HTTP cache, which on a deploy can still be holding the
+   previous shell — the new worker would then install the build it is
+   replacing and the update would appear to do nothing. Hashed assets are
+   immune, the document is not. */
+async function precache(cache, url) {
+  try {
+    const res = await fetch(new Request(url, { cache: 'reload' }));
+    if (res.ok) await cache.put(url, flatten(res));
+  } catch {
+    /* one missing file must not fail the whole install */
+  }
+}
+
+/* Is some other generation holding a shell that can never answer a
+   navigation? Then its page is showing WebKit's error and cannot tap
+   anything — there is no running app to break and nobody who could ask, so
+   this worker takes over uninvited. Reading the flag rather than a list of
+   bad build ids means this cannot misfire on a healthy install, and needs no
+   maintenance once the poisoned generations are gone. */
+async function strandedGeneration() {
+  for (const key of await caches.keys()) {
+    if (key === CACHE) continue;
+    const c = await caches.open(key);
+    for (const url of ['/index.html', SHELL_DOC]) {
+      const hit = await c.match(url);
+      if (hit && hit.redirected) return true;
+    }
+  }
+  return false;
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches
-      .open(CACHE)
-      /* `cache: 'reload'` matters more than it looks. Without it the precache
-         is filled from the HTTP cache, which on a deploy can still be holding
-         the previous `index.html` — the new worker would then install a shell
-         from the build it is replacing and the update would appear to do
-         nothing. Hashed assets are immune, `index.html` is not. */
-      .then((c) =>
-        Promise.all(
-          SHELL.map((url) =>
-            // one missing file must not fail the whole install
-            c.add(new Request(url, { cache: 'reload' })).catch(() => undefined)
-          )
-        )
-      )
+    (async () => {
+      const cache = await caches.open(CACHE);
+      await Promise.all(SHELL.map((url) => precache(cache, url)));
+      if (await strandedGeneration()) await self.skipWaiting();
+    })()
   );
 });
 
@@ -104,12 +147,18 @@ self.addEventListener('fetch', (event) => {
     /* Cache-first, and the boot is therefore instant and identical online and
        off. Freshness is not this handler's job — a newer build is picked up by
        the update check in the page, which is the only thing that can swap
-       shell and chunks together. */
+       shell and chunks together.
+
+       Everything leaving here goes through flatten(): a navigation response
+       that has been redirected is rejected by the browser outright, and the
+       page that gets rejected is the whole app. */
     event.respondWith(
       caches
-        .match('/index.html', { cacheName: CACHE })
+        .open(CACHE)
+        .then((c) => c.match(SHELL_DOC))
         .then((cached) => cached ?? fetch(request))
-        .catch(() => caches.match('/').then((r) => r ?? Response.error()))
+        .then(flatten)
+        .catch(() => Response.error())
     );
     return;
   }
