@@ -39,6 +39,8 @@ interface EditionState {
   get(subject: EditionSubject): EditionRecord | undefined;
   ensure(subject: EditionSubject): Promise<void>;
   fill(subjects: EditionSubject[]): Promise<void>;
+  /** Throw the local cache away and fetch it all again. */
+  refill(subjects: EditionSubject[]): Promise<void>;
 }
 
 /* The language to ask Wikipedia in when the book does not say. The browser's
@@ -98,6 +100,19 @@ export const useEditions = create<EditionState>((set, get) => ({
     } finally {
       set({ filling: false, trouble: lookupTrouble() });
     }
+  },
+
+  /* Safe to be this blunt because the table is a cache and nothing else:
+     no user data is in it, the server has every answer already, and a
+     re-fetch therefore costs one round trip to our own Worker and nothing
+     to any catalogue. `EXTRACT_VERSION` handles the case where *we* know a
+     row is out of date; this is for when the reader does — a wrong cover,
+     or a fix that shipped and did not seem to arrive. */
+  async refill(subjects) {
+    if (get().filling) return;
+    await db.editions.clear();
+    set({ byKey: {}, trouble: null });
+    await get().fill(subjects);
   },
 }));
 

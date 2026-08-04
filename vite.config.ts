@@ -68,6 +68,17 @@ function serviceWorkerAssets(): Plugin {
 }
 
 export default defineConfig({
+  /* The moment this bundle was built, shown on the account screen.
+
+     A PWA that never activates a new worker without being asked — which is
+     deliberate, see public/sw.js — can sit several builds behind while
+     every deploy looks successful from the outside. "Is this device
+     running the code I just shipped?" then has no answer, and a client-side
+     fix that has simply not arrived yet is indistinguishable from a fix
+     that does not work. That cost several rounds on the edition lookup. */
+  define: {
+    __BUILT_AT__: JSON.stringify(new Date().toISOString()),
+  },
   plugins: [react(), serviceWorkerAssets()],
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },

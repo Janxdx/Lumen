@@ -76,7 +76,9 @@ export function EditionCard({ title, author, language, publisher }: Props) {
     d.pageCount ? `${d.pageCount} pages` : null,
   ].filter(Boolean) as string[];
 
-  if (!coverUrl && !facts.length && !d.wiki) return null;
+  /* Nothing at all came back — render nothing rather than a card
+     explaining that nothing came back. You came here to rate a book. */
+  if (!coverUrl && !facts.length && !d.wiki && !d.pageCount) return null;
 
   return (
     <section className="edition-card">
@@ -87,11 +89,20 @@ export function EditionCard({ title, author, language, publisher }: Props) {
       <div className="edition-body">
         {facts.length > 0 && <p className="edition-facts">{facts.join(' · ')}</p>}
 
-        {livery && (
-          <p className="edition-livery">
-            Drawn on the shelf as {livery.label}
-          </p>
-        )}
+        {/* What the shelf is going to do with this, in one line. Worth
+            saying: a spine drawn in the mood colour looks identical
+            whether no cover was found, the cover held no usable colour, or
+            the lookup never ran — and those are three different problems.
+            It is also the honest answer to "why is this one grey". */}
+        <p className="edition-livery">
+          {livery
+            ? `Drawn on the shelf as ${livery.label}`
+            : d.palette?.length
+              ? 'Drawn on the shelf in its own cover colours'
+              : coverUrl
+                ? 'No usable colour in the cover — drawn by mood'
+                : 'No cover found — drawn by mood'}
+        </p>
 
         {d.wiki && (
           <>

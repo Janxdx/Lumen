@@ -79,6 +79,7 @@ export function Ratings() {
   const filling = useEditions((s) => s.filling);
   const trouble = useEditions((s) => s.trouble);
   const fill = useEditions((s) => s.fill);
+  const refill = useEditions((s) => s.refill);
 
   /* What each rating's book knows about itself, over and above the rating.
      The publisher and the language come from the EPUB when there is one —
@@ -205,6 +206,22 @@ export function Ratings() {
                   Shelf
                 </button>
               </div>
+
+              {/* Throwing the local cache away is safe here in a way it is
+                  nowhere else in this app: the table holds no user data,
+                  and the server has every answer already, so this costs a
+                  round trip to our own Worker and nothing to any
+                  catalogue. It is the answer to a wrong cover, and to a
+                  fix that shipped and did not seem to arrive. */}
+              {shelfMode === 'shelf' && !filling && (
+                <button
+                  className="linky muted"
+                  onClick={() => void refill([...subjects.values()])}
+                  title="Discard what is stored and ask the catalogues again"
+                >
+                  Look up again
+                </button>
+              )}
             </div>
 
             {shelfMode === 'shelf' && (filling || trouble) && (
